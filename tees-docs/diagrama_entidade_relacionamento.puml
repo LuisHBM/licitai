@@ -1,0 +1,121 @@
+@startuml
+skinparam linetype ortho
+skinparam ranksep 60
+skinparam nodesep 50
+
+skinparam entity {
+  BackgroundColor #E6F1FB
+  BorderColor #185FA5
+  FontColor #0C447C
+  FontSize 12
+}
+
+skinparam arrow {
+  Color #888780
+  FontSize 11
+}
+
+' Administrador e controle de coleta
+entity "administrador" as ADM {
+  * id_administrador : uuid <<PK>>
+  --
+  nome : varchar
+  email : varchar
+  senha_hash : varchar
+  criado_em : timestamp
+}
+
+entity "coleta" as COL {
+  * id_coleta : uuid <<PK>>
+  --
+  id_administrador : uuid <<FK>>
+  status : varchar
+  modalidade_filtro : int
+  uf_filtro : varchar
+  data_inicio_coleta : date
+  data_fim_coleta : date
+  total_registros : int
+  executado_em : timestamp
+}
+
+' Dimensoes
+entity "orgao" as ORG {
+  * id_orgao : uuid <<PK>>
+  --
+  cnpj : varchar
+  razao_social : varchar
+  esfera : char
+  poder : char
+}
+
+entity "unidade" as UNI {
+  * id_unidade : uuid <<PK>>
+  --
+  id_orgao : uuid <<FK>>
+  codigo_unidade : varchar
+  nome_unidade : varchar
+  municipio : varchar
+  codigo_ibge : varchar
+  uf : char
+}
+
+entity "modalidade" as MOD {
+  * id_modalidade : int <<PK>>
+  --
+  codigo : int
+  nome : varchar
+}
+
+' Entidade principal
+entity "licitacao" as LIC {
+  * id_licitacao : uuid <<PK>>
+  --
+  id_coleta : uuid <<FK>>
+  id_unidade : uuid <<FK>>
+  id_modalidade : int <<FK>>
+  numero_controle_pncp : varchar
+  numero_compra : varchar
+  ano_compra : int
+  objeto_compra : text
+  valor_total_estimado : numeric
+  valor_total_homologado : numeric
+  situacao_id : int
+  srp : boolean
+  search_vector : tsvector
+  data_publicacao_pncp : date
+  data_abertura_proposta : timestamp
+  data_encerramento_proposta : timestamp
+  data_inclusao : timestamp
+  data_atualizacao : timestamp
+}
+
+entity "item_licitacao" as ITEM {
+  * id_item : uuid <<PK>>
+  --
+  id_licitacao : uuid <<FK>>
+  numero_item : int
+  descricao : text
+  unidade_fornecimento : varchar
+  quantidade : numeric
+  valor_unitario_estimado : numeric
+  situacao : varchar
+}
+
+entity "embedding" as EMB {
+  * id_embedding : uuid <<PK>>
+  --
+  id_licitacao : uuid <<FK>>
+  vetor : vector(1536)
+  modelo : varchar
+  criado_em : timestamp
+}
+
+' Relacionamentos
+ADM  ||--o{ COL  : executa
+COL  ||--o{ LIC  : extrai
+ORG  ||--o{ UNI  : possui
+UNI  ||--o{ LIC  : realiza
+MOD  ||--o{ LIC  : classifica
+LIC  ||--o{ ITEM : contem
+LIC  ||--||  EMB  : possui
+@enduml

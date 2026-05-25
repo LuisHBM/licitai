@@ -1,0 +1,28 @@
+# Ambiente virtual
+.venv/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Pytest
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Claude Code (configurações locais)
+.claude/settings.local.json
+
+# Distribuição / build
+dist/
+build/
+*.egg-info/

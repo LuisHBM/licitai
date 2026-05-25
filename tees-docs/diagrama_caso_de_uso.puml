@@ -1,0 +1,43 @@
+@startuml LicitAI_CasosDeUso
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+skinparam usecase {
+  BackgroundColor #E6F1FB
+  BorderColor #185FA5
+  FontColor #0C447C
+  ArrowColor #888780
+}
+
+actor "Usuário\npúblico" as Usuario
+actor "Administrador" as Admin
+
+rectangle "LicitAI" {
+
+  usecase "UC-01\nBuscar licitações por texto"        as UC01
+  usecase "UC-02\nBuscar por linguagem natural"       as UC02
+  usecase "UC-03\nFiltrar licitações"                 as UC03
+  usecase "UC-04\nVisualizar detalhes da licitação"   as UC04
+  usecase "UC-05\nAcessar painel analítico"           as UC05
+
+  usecase "UC-06\nExecutar coleta de dados"           as UC06
+  usecase "UC-07\nConfigurar parâmetros de coleta"    as UC07
+  usecase "UC-08\nMonitorar logs do sistema"          as UC08
+  usecase "UC-09\nGerar exportação CSV para BI"       as UC09
+
+}
+
+Usuario --> UC01
+Usuario --> UC02
+Usuario --> UC03
+Usuario --> UC04
+Usuario --> UC05
+
+Admin --> UC06
+Admin --> UC07
+Admin --> UC08
+Admin --> UC09
+
+@enduml

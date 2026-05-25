@@ -1,0 +1,56 @@
+@startuml LicitAI_Arquitetura
+
+skinparam linetype ortho
+skinparam ranksep 50
+skinparam nodesep 50
+skinparam defaultTextAlignment center
+
+skinparam node {
+  BackgroundColor #F1EFE8
+  BorderColor #888780
+  FontColor #444441
+  FontSize 13
+  FontStyle bold
+}
+
+skinparam component {
+  BackgroundColor #E6F1FB
+  BorderColor #185FA5
+  FontColor #0C447C
+  FontSize 12
+}
+
+skinparam database {
+  BackgroundColor #E1F5EE
+  BorderColor #0F6E56
+  FontColor #085041
+  FontSize 12
+}
+
+skinparam arrow {
+  Color #888780
+  FontColor #5F5E5A
+  FontSize 11
+}
+
+' Fonte externa
+node "API PNCP" as PNCP
+
+' Camadas
+component "Crawler / ETL\n(Python)" as ETL
+database  "PostgreSQL\n+ pgvector" as DB
+component "Back-End\n(FastAPI)" as API
+component "IA Generativa\n(LangChain + LLM)" as IA
+component "Front-End\n(Next.js)" as FRONT
+component "Analitica\n(Power BI)" as BI
+
+' Relacoes
+PNCP  --> ETL   : coleta periodica
+ETL   --> DB    : upsert
+DB    --> API   : consultas SQL\ne vetoriais
+IA    --> DB    : gera e persiste\nembeddings
+IA    --> API   : interpreta\nqueries
+API   --> FRONT : REST / JSON
+API   ..> BI    : exporta CSV
+
+@enduml

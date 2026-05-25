@@ -1,0 +1,3 @@
+[submodule "tees-docs"]
+	path = tees-docs
+	url = https://github.com/LuisHBM/tees-docs.git
