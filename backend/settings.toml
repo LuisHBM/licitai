@@ -1,21 +1,16 @@
-ENV_FOR_DYNACONF = "development"  # production or development
+ENV_FOR_DYNACONF = "development"
 
 [development]
 db_host = "localhost"
 db_port = 5438
 db_name = "licitai"
 db_user = "postgres"
-db_password = "postgres"
 db_pool_size = 5
 db_max_overflow = 10
 db_echo = true
 
 [production]
-db_host = "db.kiidptoevtuzyxgojsql.supabase.co"
 db_port = 5432
-db_name = "postgres"
-db_user = "postgres"
-db_password = ""
 db_pool_size = 10
 db_max_overflow = 20
 db_echo = false
