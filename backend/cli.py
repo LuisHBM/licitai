@@ -31,7 +31,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--db-url",
         default=os.environ.get("DATABASE_URL"),
-        help="URL do banco (default: var DATABASE_URL)",
+        help="URL do banco (default: var DATABASE_URL, overrides settings.toml)",
+    )
+    p.add_argument(
+        "--env",
+        default=os.environ.get("LICITAI_ENV") or os.environ.get("ENVIRONMENT"),
+        help="Ambiente de configuração a usar (default: development)",
     )
     p.add_argument(
         "--init-db",
@@ -62,8 +67,14 @@ def main() -> None:
         print("--data-inicio deve ser <= --data-fim", file=sys.stderr)
         sys.exit(1)
 
+    if args.env:
+        os.environ["ENV_FOR_DYNACONF"] = args.env
     if args.db_url:
         os.environ["DATABASE_URL"] = args.db_url
+
+    from config import settings
+
+    logging.getLogger(__name__).info("Usando configuração %s", settings.current_env.lower())
 
     import crawler.etl as etl
     import crawler.client as client

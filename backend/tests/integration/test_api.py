@@ -1,9 +1,12 @@
 from datetime import date
 
+import pytest
+
 from db.models import Coleta
 from tests.conftest import make_licitacao
 
 
+@pytest.mark.integration
 class TestModalidades:
     def test_retorna_lista(self, client):
         resp = client.get("/modalidades")
@@ -19,6 +22,7 @@ class TestModalidades:
         assert ids == sorted(ids)
 
 
+@pytest.mark.integration
 class TestEstados:
     def test_retorna_todos_estados_seeded(self, client):
         resp = client.get("/estados")
@@ -48,6 +52,7 @@ class TestEstados:
         assert ba["total"] == 1
 
 
+@pytest.mark.integration
 class TestSearchLicitacoes:
     def test_sem_resultados(self, client):
         resp = client.get("/licitacoes")
@@ -130,6 +135,7 @@ class TestSearchLicitacoes:
         assert "modalidade_nome" in item
 
 
+@pytest.mark.integration
 class TestGetLicitacao:
     def test_retorna_detalhe(self, client, db_session):
         lic = make_licitacao(db_session, objeto_compra="Obra de infraestrutura")
@@ -162,6 +168,7 @@ class TestGetLicitacao:
         assert resp.status_code == 404
 
 
+@pytest.mark.integration
 class TestColetas:
     def test_iniciar_coleta_retorna_202(self, client, mocker):
         mocker.patch("api.routes._executar_coleta")

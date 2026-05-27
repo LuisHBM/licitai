@@ -5,7 +5,10 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+import pytest
+
 from crawler.etl import _get_or_create_orgao, _get_or_create_unidade, crawl
+from crawler.schemas import Contratacao, OrgaoEntidade, PaginaContratacoes, UnidadeOrgao
 from db.models import Coleta, Licitacao, Orgao, Unidade
 
 _ORGAO_DATA = {
@@ -43,13 +46,17 @@ _CONTRATACAO = {
     "unidadeOrgao": _UNIDADE_DATA,
 }
 
-_FAKE_PAGE = {"totalRegistros": 1, "totalPaginas": 1, "data": [_CONTRATACAO]}
+_FAKE_PAGE = PaginaContratacoes.model_validate(
+    {"totalRegistros": 1, "totalPaginas": 1, "data": [_CONTRATACAO]}
+)
+_EMPTY_PAGE = PaginaContratacoes(totalRegistros=0, totalPaginas=0, data=[])
 
 
+@pytest.mark.integration
 class TestGetOrCreateOrgao:
     def test_cria_orgao_novo(self, db_session):
         cache = {}
-        id_orgao = _get_or_create_orgao(db_session, _ORGAO_DATA, cache)
+        id_orgao = _get_or_create_orgao(db_session, OrgaoEntidade.model_validate(_ORGAO_DATA), cache)
 
         orgao = db_session.query(Orgao).filter_by(cnpj="12345678000195").first()
         assert orgao is not None
@@ -58,34 +65,36 @@ class TestGetOrCreateOrgao:
 
     def test_retorna_orgao_existente(self, db_session):
         cache = {}
-        id1 = _get_or_create_orgao(db_session, _ORGAO_DATA, cache)
-        id2 = _get_or_create_orgao(db_session, _ORGAO_DATA, cache)
+        orgao = OrgaoEntidade.model_validate(_ORGAO_DATA)
+        id1 = _get_or_create_orgao(db_session, orgao, cache)
+        id2 = _get_or_create_orgao(db_session, orgao, cache)
 
         assert id1 == id2
         assert db_session.query(Orgao).count() == 1
 
     def test_usa_cache(self, db_session):
         cache = {}
-        _get_or_create_orgao(db_session, _ORGAO_DATA, cache)
+        orgao = OrgaoEntidade.model_validate(_ORGAO_DATA)
+        _get_or_create_orgao(db_session, orgao, cache)
         assert "12345678000195" in cache
 
         with patch.object(db_session, "query") as mock_query:
-            _get_or_create_orgao(db_session, _ORGAO_DATA, cache)
+            _get_or_create_orgao(db_session, orgao, cache)
             mock_query.assert_not_called()
 
     def test_cnpj_sem_formatacao(self, db_session):
-        data = {**_ORGAO_DATA, "cnpj": "12.345.678/0001-95"}
+        orgao = OrgaoEntidade.model_validate({**_ORGAO_DATA, "cnpj": "12.345.678/0001-95"})
         cache = {}
-        _get_or_create_orgao(db_session, data, cache)
+        _get_or_create_orgao(db_session, orgao, cache)
 
-        orgao = db_session.query(Orgao).filter_by(cnpj="12345678000195").first()
-        assert orgao is not None
+        assert db_session.query(Orgao).filter_by(cnpj="12345678000195").first() is not None
 
     def test_cnpj_vazio_levanta_erro(self, db_session):
         with pytest.raises(ValueError, match="CNPJ"):
-            _get_or_create_orgao(db_session, {"cnpj": ""}, {})
+            _get_or_create_orgao(db_session, OrgaoEntidade(cnpj=""), {})
 
 
+@pytest.mark.integration
 class TestGetOrCreateUnidade:
     def test_cria_unidade_nova(self, db_session):
         orgao = Orgao(cnpj="99999999000191", razao_social="Orgão X")
@@ -93,7 +102,7 @@ class TestGetOrCreateUnidade:
         db_session.flush()
 
         cache = {}
-        id_unidade = _get_or_create_unidade(db_session, _UNIDADE_DATA, orgao.id_orgao, cache)
+        id_unidade = _get_or_create_unidade(db_session, UnidadeOrgao.model_validate(_UNIDADE_DATA), orgao.id_orgao, cache)
 
         unidade = db_session.query(Unidade).filter_by(id_unidade=id_unidade).first()
         assert unidade is not None
@@ -105,14 +114,16 @@ class TestGetOrCreateUnidade:
         db_session.add(orgao)
         db_session.flush()
 
+        unidade = UnidadeOrgao.model_validate(_UNIDADE_DATA)
         cache = {}
-        id1 = _get_or_create_unidade(db_session, _UNIDADE_DATA, orgao.id_orgao, cache)
-        id2 = _get_or_create_unidade(db_session, _UNIDADE_DATA, orgao.id_orgao, cache)
+        id1 = _get_or_create_unidade(db_session, unidade, orgao.id_orgao, cache)
+        id2 = _get_or_create_unidade(db_session, unidade, orgao.id_orgao, cache)
 
         assert id1 == id2
         assert db_session.query(Unidade).count() == 1
 
 
+@pytest.mark.integration
 class TestCrawl:
     @patch("crawler.etl._upsert_licitacao")
     @patch("crawler.client.fetch_contratacoes_page")
@@ -154,7 +165,7 @@ class TestCrawl:
     @patch("crawler.etl._upsert_licitacao")
     @patch("crawler.client.fetch_contratacoes_page")
     def test_sem_registros_na_api(self, mock_fetch, mock_upsert, db_session):
-        mock_fetch.return_value = {"totalRegistros": 0, "totalPaginas": 0, "data": []}
+        mock_fetch.return_value = _EMPTY_PAGE
 
         crawl(
             data_inicio=date(2025, 1, 1),
@@ -207,6 +218,7 @@ class TestCrawl:
         assert {c.modalidade_filtro for c in coletas} == {6, 8}
 
 
+@pytest.mark.integration
 class TestUpsertLicitacao:
     @patch("crawler.etl.pg_insert", new=sqlite_insert)
     def test_insere_nova_licitacao(self, db_session):
@@ -227,9 +239,8 @@ class TestUpsertLicitacao:
         db_session.add(coleta)
         db_session.flush()
 
-        id_lic = _upsert_licitacao(
-            db_session, _CONTRATACAO, coleta.id_coleta, unidade.id_unidade, 6
-        )
+        rec = Contratacao.model_validate(_CONTRATACAO)
+        id_lic = _upsert_licitacao(db_session, rec, coleta.id_coleta, unidade.id_unidade)
         db_session.commit()
 
         lic = db_session.query(Licitacao).filter_by(id_licitacao=id_lic).first()

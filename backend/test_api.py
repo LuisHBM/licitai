@@ -29,7 +29,7 @@ def _get(path: str, params: dict, timeout: int = 60) -> dict:
     return resp.json()
 
 
-def test_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, pagina_size: int) -> None:
+def run_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, pagina_size: int) -> None:
     params = {
         "dataInicial": data.strftime("%Y%m%d"),
         "dataFinal": data.strftime("%Y%m%d"),
@@ -62,7 +62,7 @@ def test_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, 
             print()
 
 
-def test_itens(cnpj: str, ano: int, sequencial: str, pagina: int, pagina_size: int) -> None:
+def run_itens(cnpj: str, ano: int, sequencial: str, pagina: int, pagina_size: int) -> None:
     path = f"/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/itens"
     params = {"pagina": pagina, "tamanhoPagina": pagina_size}
 
@@ -100,9 +100,9 @@ def main() -> None:
 
     if args.itens:
         cnpj, ano, seq = args.itens
-        test_itens(cnpj, int(ano), seq, args.pagina, args.pagina_size)
+        run_itens(cnpj, int(ano), seq, args.pagina, args.pagina_size)
     else:
-        test_contratacoes(
+        run_contratacoes(
             date.fromisoformat(args.data),
             args.modalidade,
             args.uf,

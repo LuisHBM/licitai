@@ -14,6 +14,10 @@ from api.schemas import (
     ColetaOut,
     ColetaSolicitacao,
     EstadoOut,
+    FacetModalidade,
+    FacetSituacao,
+    FacetUF,
+    FiltrosOut,
     LicitacaoDetalhe,
     LicitacaoResumo,
     ModalidadeOut,
@@ -114,32 +118,7 @@ def _cached_estados(session):
     ]
 
 
-@app.get("/licitacoes", response_model=PaginatedLicitacoes)
-def search_licitacoes(
-    q: str | None = Query(default=None, description="Busca no objeto da compra"),
-    uf: str | None = Query(default=None, description="Sigla do estado (ex: BA, SP)"),
-    modalidade: int | None = Query(default=None, description="Código da modalidade"),
-    data_inicio: date | None = Query(default=None),
-    data_fim: date | None = Query(default=None),
-    situacao_id: int | None = Query(default=None),
-    pagina: int = Query(default=1, ge=1),
-    tamanho: int = Query(default=20, ge=1, le=100),
-    session: Session = Depends(get_session),
-):
-    query = (
-        session.query(
-            Licitacao,
-            Unidade.uf,
-            Unidade.municipio,
-            Orgao.cnpj.label("orgao_cnpj"),
-            Orgao.razao_social.label("orgao_razao_social"),
-            Modalidade.nome.label("modalidade_nome"),
-        )
-        .join(Unidade, Licitacao.id_unidade == Unidade.id_unidade)
-        .join(Orgao, Unidade.id_orgao == Orgao.id_orgao)
-        .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade)
-    )
-
+def _aplicar_filtros(query, *, q, uf, modalidade, data_inicio, data_fim, situacao_id):
     if q:
         query = query.filter(
             Licitacao.search_vector.op("@@")(func.plainto_tsquery("portuguese", q))
@@ -154,6 +133,95 @@ def search_licitacoes(
         query = query.filter(Licitacao.data_publicacao_pncp <= data_fim)
     if situacao_id is not None:
         query = query.filter(Licitacao.situacao_id == situacao_id)
+    return query
+
+
+@app.get("/licitacoes/filtros", response_model=FiltrosOut)
+def filtros_licitacoes(
+    q: str | None = Query(default=None),
+    uf: str | None = Query(default=None),
+    modalidade: int | None = Query(default=None),
+    data_inicio: date | None = Query(default=None),
+    data_fim: date | None = Query(default=None),
+    situacao_id: int | None = Query(default=None),
+    session: Session = Depends(get_session),
+):
+    kw = dict(q=q, uf=uf, modalidade=modalidade, data_inicio=data_inicio, data_fim=data_fim, situacao_id=situacao_id)
+
+    def _base(cols):
+        return (
+            session.query(*cols)
+            .join(Unidade, Licitacao.id_unidade == Unidade.id_unidade)
+            .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade)
+        )
+
+    total = _aplicar_filtros(_base([func.count(Licitacao.id_licitacao)]), **kw).scalar()
+
+    # cada faceta exclui o próprio filtro para mostrar todas as opções disponíveis
+    modalidades = (
+        _aplicar_filtros(_base([Modalidade.id_modalidade, Modalidade.nome, func.count(Licitacao.id_licitacao).label("total")]), **{**kw, "modalidade": None})
+        .group_by(Modalidade.id_modalidade, Modalidade.nome)
+        .having(func.count(Licitacao.id_licitacao) > 0)
+        .order_by(func.count(Licitacao.id_licitacao).desc())
+        .all()
+    )
+
+    ufs = (
+        _aplicar_filtros(
+            session.query(Unidade.uf, Estado.nome, func.count(Licitacao.id_licitacao).label("total"))
+            .join(Licitacao, Licitacao.id_unidade == Unidade.id_unidade)
+            .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade)
+            .join(Estado, Estado.uf == Unidade.uf),
+            **{**kw, "uf": None},
+        )
+        .group_by(Unidade.uf, Estado.nome)
+        .having(func.count(Licitacao.id_licitacao) > 0)
+        .order_by(func.count(Licitacao.id_licitacao).desc())
+        .all()
+    )
+
+    situacoes = (
+        _aplicar_filtros(_base([Licitacao.situacao_id, func.count(Licitacao.id_licitacao).label("total")]), **{**kw, "situacao_id": None})
+        .filter(Licitacao.situacao_id.isnot(None))
+        .group_by(Licitacao.situacao_id)
+        .order_by(Licitacao.situacao_id)
+        .all()
+    )
+
+    return FiltrosOut(
+        total=total,
+        modalidades=[FacetModalidade(id_modalidade=r.id_modalidade, nome=r.nome, total=r.total) for r in modalidades],
+        ufs=[FacetUF(uf=r.uf, nome=r.nome, total=r.total) for r in ufs],
+        situacoes=[FacetSituacao(situacao_id=r.situacao_id, total=r.total) for r in situacoes],
+    )
+
+
+@app.get("/licitacoes", response_model=PaginatedLicitacoes)
+def search_licitacoes(
+    q: str | None = Query(default=None, description="Busca no objeto da compra"),
+    uf: str | None = Query(default=None, description="Sigla do estado (ex: BA, SP)"),
+    modalidade: int | None = Query(default=None, description="Código da modalidade"),
+    data_inicio: date | None = Query(default=None),
+    data_fim: date | None = Query(default=None),
+    situacao_id: int | None = Query(default=None),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_session),
+):
+    query = _aplicar_filtros(
+        session.query(
+            Licitacao,
+            Unidade.uf,
+            Unidade.municipio,
+            Orgao.cnpj.label("orgao_cnpj"),
+            Orgao.razao_social.label("orgao_razao_social"),
+            Modalidade.nome.label("modalidade_nome"),
+        )
+        .join(Unidade, Licitacao.id_unidade == Unidade.id_unidade)
+        .join(Orgao, Unidade.id_orgao == Orgao.id_orgao)
+        .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade),
+        q=q, uf=uf, modalidade=modalidade, data_inicio=data_inicio, data_fim=data_fim, situacao_id=situacao_id,
+    )
 
     total = query.count()
     rows = (
