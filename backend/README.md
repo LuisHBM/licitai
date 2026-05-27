@@ -6,7 +6,8 @@
 - **PostgreSQL 17** + **pgvector** (busca vetorial e full-text)
 - **Dynaconf** (configuração por ambiente)
 - **Pydantic v2** (validação de dados e schemas)
-- **Docker Compose** (banco local)
+- **Playwright** (headless Chrome para bypass do WAF F5 do PNCP)
+- **Docker Compose** (banco local + container da API)
 
 ## Requisitos
 
@@ -21,6 +22,9 @@ uv sync --group dev
 
 # copia o modelo de segredos e preenche com os valores locais
 cp .secrets.toml .secrets.local.toml
+
+# instala o Chrome para o Playwright (necessário para o crawler)
+uv run playwright install chrome --with-deps
 
 # sobe o postgres local (porta 5438)
 docker compose up -d
@@ -53,8 +57,9 @@ backend/
 │   ├── routes.py          # endpoints FastAPI
 │   └── schemas.py         # modelos Pydantic de request/response
 ├── crawler/
-│   ├── client.py          # cliente HTTP do PNCP (retry/backoff)
-│   ├── etl.py             # pipeline de extração e carga
+│   ├── challenge.py       # bypass do WAF F5 via Playwright (headless Chrome)
+│   ├── client.py          # chamadas à API do PNCP
+│   ├── etl.py             # pipeline de extração e carga (dia a dia)
 │   └── schemas.py         # modelos Pydantic do payload da API PNCP
 ├── db/
 │   ├── models.py          # modelos SQLAlchemy
@@ -83,6 +88,10 @@ ENV_FOR_DYNACONF=production python cli.py --init-db --data-inicio 2024-01-01 --d
 
 ## Crawler (CLI)
 
+O crawler usa Playwright para contornar o WAF F5 BIG-IP do PNCP, que bloqueia requisições HTTP diretas. Na primeira execução do processo, o Chrome é iniciado em background e reutilizado nas páginas seguintes.
+
+O ETL itera dia a dia dentro do intervalo solicitado: erros em um dia ou página não abortam a coleta — apenas pulam para o próximo.
+
 ```bash
 # coleta licitações de um intervalo de datas (todas as modalidades)
 python cli.py --data-inicio 2024-01-01 --data-fim 2024-01-31
@@ -94,11 +103,24 @@ python cli.py --data-inicio 2024-01-01 --data-fim 2024-01-31 --uf BA --modalidad
 python cli.py --data-inicio 2024-01-01 --data-fim 2024-01-31 --db-url postgresql://user:pass@host/db
 ```
 
-## API REST
+A coleta também pode ser disparada pela API via `POST /coletas` (executa em background).
+
+## Executando via Docker
+
+O container inclui o Chrome necessário para o crawler. Para subir tudo:
 
 ```bash
+docker compose up -d
+```
+
+Para subir só o banco local e rodar a API no host:
+
+```bash
+docker compose up -d db
 uvicorn api.routes:app --reload
 ```
+
+## API REST
 
 Documentação interativa: `http://localhost:8000/docs`
 
