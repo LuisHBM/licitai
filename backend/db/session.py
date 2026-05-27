@@ -58,15 +58,28 @@ def _create_search_trigger(conn) -> None:
     conn.execute(text("""
         CREATE OR REPLACE FUNCTION fn_licitacao_search_vector()
         RETURNS TRIGGER AS $$
+        DECLARE
+            v_nome_unidade text;
+            v_razao_social  text;
         BEGIN
-            NEW.search_vector := to_tsvector('portuguese', coalesce(NEW.objeto_compra, ''));
+            SELECT u.nome_unidade, o.razao_social
+              INTO v_nome_unidade, v_razao_social
+              FROM unidade u
+              JOIN orgao o ON o.id_orgao = u.id_orgao
+             WHERE u.id_unidade = NEW.id_unidade;
+
+            NEW.search_vector :=
+                setweight(to_tsvector('portuguese', coalesce(NEW.objeto_compra, '')), 'A') ||
+                setweight(to_tsvector('portuguese', coalesce(v_nome_unidade,  '')), 'B') ||
+                setweight(to_tsvector('portuguese', coalesce(v_razao_social,  '')), 'B');
+
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
     """))
     conn.execute(text("""
         CREATE OR REPLACE TRIGGER trig_licitacao_search_vector
-        BEFORE INSERT OR UPDATE OF objeto_compra ON licitacao
+        BEFORE INSERT OR UPDATE OF objeto_compra, id_unidade ON licitacao
         FOR EACH ROW EXECUTE FUNCTION fn_licitacao_search_vector();
     """))
 

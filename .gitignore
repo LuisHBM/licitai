@@ -1,11 +1,29 @@
-# Env
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtualenv / uv
+.venv/
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Segredos e config local
 .env.*
 .env.local
-.venv/
+.secrets.local.toml
+settings.local.toml
 
 # IDEs
 .vscode/
 .idea/
+.claude/
 
 # OS
 .DS_Store
@@ -13,3 +31,6 @@ Thumbs.db
 
 # Alembic
 alembic/versions/*.py
+
+# Playwright
+playwright/.auth/

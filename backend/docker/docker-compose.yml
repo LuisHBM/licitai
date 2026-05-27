@@ -10,6 +10,7 @@ services:
       - "5438:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -38,7 +39,12 @@ services:
       args:
         DEV: "true"
     container_name: licitai_tests
-    command: pytest
+    environment:
+      DATABASE_URL: postgresql://postgres:licitai@postgres:5432/licitai_test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python -m pytest tests/test_integration.py -v
     profiles:
       - test
 
