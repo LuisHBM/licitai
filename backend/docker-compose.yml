@@ -16,5 +16,28 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build: .
+    container_name: licitai_backend
+    ports:
+      - "8000:8000"
+    environment:
+      LICITAI_DB_HOST: postgres
+      LICITAI_DB_PORT: 5432
+      LICITAI_DB_PASSWORD: licitai
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tests:
+    build:
+      context: .
+      args:
+        DEV: "true"
+    container_name: licitai_tests
+    command: pytest
+    profiles:
+      - test
+
 volumes:
   pgdata:

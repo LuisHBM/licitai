@@ -9,7 +9,8 @@ dependencies = [
     "fastapi>=0.115",
     "pgvector>=0.4.2",
     "psycopg2-binary>=2.9.12",
-    "requests>=2.32",
+    "curl-cffi>=0.7",
+    "playwright>=1.44",
     "sqlalchemy>=2.0.49",
     "uvicorn[standard]>=0.30",
 ]

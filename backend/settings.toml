@@ -7,7 +7,7 @@ db_name = "licitai"
 db_user = "postgres"
 db_pool_size = 5
 db_max_overflow = 10
-db_echo = true
+db_echo = false
 
 [production]
 db_port = 5432

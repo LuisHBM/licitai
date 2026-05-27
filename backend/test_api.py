@@ -1,32 +1,27 @@
-"""
-Testa a API do PNCP diretamente, sem banco de dados.
-
-Uso:
-    python test_api.py
-    python test_api.py --data 2025-01-10 --modalidade 8 --uf SP --pagina-size 20
-    python test_api.py --itens 05816630000152 2025 0019004
-"""
-
 import argparse
-import json
+import sys
+import os
 import time
 from datetime import date
 
-import requests
+sys.path.insert(0, os.path.dirname(__file__))
 
-BASE_URL = "https://pncp.gov.br/api/consulta"
+from crawler import challenge
 
 
-def _get(path: str, params: dict, timeout: int = 60) -> dict:
-    url = BASE_URL + path
-    print(f"\nGET {url}")
-    print(f"Params: {json.dumps(params, ensure_ascii=False)}")
+def _get(path: str, params: dict, timeout: int = 60) -> dict | None:
+    print(f"\nGET https://pncp.gov.br/api/consulta{path}")
+    print(f"Params: {params}")
     t0 = time.perf_counter()
-    resp = requests.get(url, params=params, timeout=timeout)
-    elapsed = time.perf_counter() - t0
-    print(f"Status: {resp.status_code} | Tempo: {elapsed:.2f}s")
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        data = challenge.fetch_json(path, params, timeout=timeout)
+        elapsed = time.perf_counter() - t0
+        print(f"OK | Tempo: {elapsed:.2f}s")
+        return data
+    except RuntimeError as e:
+        elapsed = time.perf_counter() - t0
+        print(f"ERRO ({elapsed:.2f}s): {e}")
+        return None
 
 
 def run_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, pagina_size: int) -> None:
@@ -41,6 +36,8 @@ def run_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, p
         params["uf"] = uf
 
     data_resp = _get("/v1/contratacoes/publicacao", params)
+    if data_resp is None:
+        return
 
     total_reg = data_resp.get("totalRegistros", 0)
     total_pag = data_resp.get("totalPaginas", 0)
@@ -58,57 +55,45 @@ def run_contratacoes(data: date, modalidade: int, uf: str | None, pagina: int, p
             print(f"  valorTotalEstimado : {r.get('valorTotalEstimado')}")
             print(f"  dataPublicacaoPncp : {r.get('dataPublicacaoPncp')}")
             orgao = r.get("orgaoEntidade") or {}
-            print(f"  orgao cnpj         : {orgao.get('cnpj')} — {orgao.get('razaoSocial', '')[:50]}")
+            print(f"  orgao              : {orgao.get('cnpj')} — {orgao.get('razaoSocial', '')[:50]}")
             print()
 
 
 def run_itens(cnpj: str, ano: int, sequencial: str, pagina: int, pagina_size: int) -> None:
     path = f"/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/itens"
-    params = {"pagina": pagina, "tamanhoPagina": pagina_size}
+    data_resp = _get(path, {"pagina": pagina, "tamanhoPagina": pagina_size})
+    if data_resp is None:
+        return
 
-    data_resp = _get(path, params)
-
-    total_reg = data_resp.get("totalRegistros", 0)
-    total_pag = data_resp.get("totalPaginas", 0)
     registros = data_resp.get("data") or []
-
-    print(f"\nTotal registros: {total_reg}")
-    print(f"Total páginas:   {total_pag}")
+    print(f"\nTotal registros: {data_resp.get('totalRegistros', 0)}")
     print(f"Registros nesta página: {len(registros)}")
 
     if registros:
         print("\n--- Primeiros 3 itens ---")
         for item in registros[:3]:
-            print(f"  numeroItem             : {item.get('numeroItem')}")
-            print(f"  descricao              : {str(item.get('descricao', ''))[:80]}")
-            print(f"  quantidade             : {item.get('quantidade')}")
-            print(f"  valorUnitarioEstimado  : {item.get('valorUnitarioEstimado')}")
-            print(f"  unidadeFornecimento    : {item.get('unidadeFornecimento')}")
+            print(f"  numeroItem            : {item.get('numeroItem')}")
+            print(f"  descricao             : {str(item.get('descricao', ''))[:80]}")
+            print(f"  quantidade            : {item.get('quantidade')}")
+            print(f"  valorUnitarioEstimado : {item.get('valorUnitarioEstimado')}")
             print()
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Testa a API PNCP")
-    p.add_argument("--data", default=str(date.today()), help="Data (YYYY-MM-DD), default: hoje")
+    p = argparse.ArgumentParser(description="Smoke test da API PNCP")
+    p.add_argument("--data", default="2025-06-01", help="Data (YYYY-MM-DD), default: 2025-06-01")
     p.add_argument("--modalidade", type=int, default=6, help="Código da modalidade (default: 6 = Pregão)")
-    p.add_argument("--uf", default=None, help="UF (opcional, ex: BA)")
+    p.add_argument("--uf", default=None)
     p.add_argument("--pagina", type=int, default=1)
     p.add_argument("--pagina-size", type=int, default=10)
-    p.add_argument("--itens", nargs=3, metavar=("CNPJ", "ANO", "SEQUENCIAL"),
-                   help="Testa o endpoint de itens. Ex: --itens 05816630000152 2025 0019004")
+    p.add_argument("--itens", nargs=3, metavar=("CNPJ", "ANO", "SEQUENCIAL"))
     args = p.parse_args()
 
     if args.itens:
         cnpj, ano, seq = args.itens
         run_itens(cnpj, int(ano), seq, args.pagina, args.pagina_size)
     else:
-        run_contratacoes(
-            date.fromisoformat(args.data),
-            args.modalidade,
-            args.uf,
-            args.pagina,
-            args.pagina_size,
-        )
+        run_contratacoes(date.fromisoformat(args.data), args.modalidade, args.uf, args.pagina, args.pagina_size)
 
 
 if __name__ == "__main__":

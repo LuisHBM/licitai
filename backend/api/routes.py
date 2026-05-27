@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import date
 from functools import lru_cache
 from uuid import UUID
@@ -26,7 +27,21 @@ from api.schemas import (
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="LicitAI", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    yield
+
+
+app = FastAPI(title="LicitAI", version="0.1.0", lifespan=lifespan)
 
 
 def get_session():

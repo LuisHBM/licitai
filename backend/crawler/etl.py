@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from datetime import timedelta
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -74,7 +75,7 @@ def _upsert_licitacao(
         "id_licitacao": id_licitacao,
         "id_coleta": id_coleta,
         "id_unidade": id_unidade,
-        "id_modalidade": rec.codigoModalidadeContratacao,
+        "id_modalidade": rec.modalidadeId,
         "numero_controle_pncp": rec.numeroControlePNCP,
         "numero_compra": rec.numeroCompra,
         "ano_compra": rec.anoCompra,
@@ -100,17 +101,21 @@ def _upsert_licitacao(
     return id_licitacao
 
 
+def _dias(data_inicio, data_fim):
+    dia = data_inicio
+    while dia <= data_fim:
+        yield dia
+        dia += timedelta(days=1)
+
+
 def crawl(
     data_inicio, data_fim, modalidades: list[int], uf: str | None, session: Session
 ) -> None:
-    data_ini_str = data_inicio.strftime("%Y%m%d")
-    data_fim_str = data_fim.strftime("%Y%m%d")
-
     orgao_cache: dict = {}
     unidade_cache: dict = {}
 
     for modalidade in modalidades:
-        logger.info("Coletando modalidade %d (%s → %s)...", modalidade, data_ini_str, data_fim_str)
+        logger.info("Coletando modalidade %d (%s → %s)...", modalidade, data_inicio, data_fim)
 
         coleta = Coleta(
             status="em_andamento",
@@ -124,18 +129,33 @@ def crawl(
         session.flush()
 
         total_saved = 0
-        try:
-            first_page = pncp_client.fetch_contratacoes_page(data_ini_str, data_fim_str, modalidade, pagina=1, uf=uf)
-            logger.info("  %d registros em %d páginas", first_page.totalRegistros, first_page.totalPaginas)
+
+        for dia in _dias(data_inicio, data_fim):
+            dia_str = dia.strftime("%Y%m%d")
+
+            try:
+                first_page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=1, uf=uf)
+            except Exception as exc:
+                logger.error("  Dia %s falhou: %s. Pulando para o próximo...", dia_str, exc)
+                continue
+
+            logger.info("  Dia %s — %d registros em %d páginas", dia_str, first_page.totalRegistros, first_page.totalPaginas)
 
             for page_num in range(1, first_page.totalPaginas + 1):
-                page = first_page if page_num == 1 else (
-                    time.sleep(PAGE_DELAY) or
-                    pncp_client.fetch_contratacoes_page(data_ini_str, data_fim_str, modalidade, pagina=page_num, uf=uf)
-                )
-                logger.info("  Página %d/%d — %d registros", page_num, first_page.totalPaginas, len(page.data))
+                try:
+                    if page_num == 1:
+                        page = first_page
+                    else:
+                        time.sleep(PAGE_DELAY)
+                        page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=page_num, uf=uf)
+                except Exception as exc:
+                    logger.error("  Dia %s página %d/%d falhou: %s. Continuando...", dia_str, page_num, first_page.totalPaginas, exc)
+                    continue
 
                 for rec in page.data:
+                    if rec.modalidadeId is None:
+                        logger.debug("Registro %s sem modalidade, pulando.", rec.numeroControlePNCP)
+                        continue
                     try:
                         id_orgao = _get_or_create_orgao(session, rec.orgaoEntidade, orgao_cache)
                         id_unidade = _get_or_create_unidade(session, rec.unidadeOrgao, id_orgao, unidade_cache)
@@ -148,14 +168,7 @@ def crawl(
 
                 session.commit()
 
-            coleta.status = "concluido"
-            coleta.total_registros = total_saved
-            session.commit()
-            logger.info("  Modalidade %d concluída: %d registros salvos.", modalidade, total_saved)
-
-        except Exception as exc:
-            logger.error("Falha na modalidade %d: %s", modalidade, exc)
-            coleta.status = "erro"
-            coleta.total_registros = total_saved
-            session.commit()
-            raise
+        coleta.status = "concluido"
+        coleta.total_registros = total_saved
+        session.commit()
+        logger.info("  Modalidade %d concluída: %d registros salvos.", modalidade, total_saved)

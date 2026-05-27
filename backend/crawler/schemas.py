@@ -34,6 +34,12 @@ def _to_decimal(v: object) -> Decimal | None:
         return None
 
 
+def _to_str(v: object) -> str | None:
+    if v is None:
+        return None
+    return str(v)
+
+
 def _normalize_cnpj(v: object) -> str:
     return str(v).replace(".", "").replace("/", "").replace("-", "")
 
@@ -41,6 +47,7 @@ def _normalize_cnpj(v: object) -> str:
 PNCPDate = Annotated[date | None, BeforeValidator(_to_date)]
 PNCPDatetime = Annotated[datetime | None, BeforeValidator(_to_datetime)]
 PNCPDecimal = Annotated[Decimal | None, BeforeValidator(_to_decimal)]
+PNCPStr = Annotated[str | None, BeforeValidator(_to_str)]
 
 
 class OrgaoEntidade(BaseModel):
@@ -55,10 +62,10 @@ class OrgaoEntidade(BaseModel):
 class UnidadeOrgao(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    codigoUnidade: str
+    codigoUnidade: PNCPStr = None
     nomeUnidade: str | None = None
     municipioNome: str | None = None
-    codigoIbge: str | None = None
+    codigoIbge: PNCPStr = None
     ufSigla: str | None = None
 
 
@@ -66,12 +73,12 @@ class Contratacao(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     numeroControlePNCP: str
-    codigoModalidadeContratacao: int
+    modalidadeId: int | None = None
     orgaoEntidade: OrgaoEntidade
     unidadeOrgao: UnidadeOrgao
-    numeroCompra: str | None = None
+    numeroCompra: PNCPStr = None
     anoCompra: int | None = None
-    sequencialCompra: str | None = None
+    sequencialCompra: PNCPStr = None
     objetoCompra: str | None = None
     valorTotalEstimado: PNCPDecimal = None
     valorTotalHomologado: PNCPDecimal = None
