@@ -72,7 +72,10 @@ backend/
 ├── config.py              # inicialização do Dynaconf
 ├── settings.toml          # configurações por ambiente
 ├── .secrets.toml          # modelo de segredos (valores vazios)
-├── docker-compose.yml     # postgres + pgvector local
+├── docker/
+│   ├── Dockerfile         # imagem da API (inclui Chrome para o Playwright)
+│   ├── docker-compose.yml # postgres + pgvector + container da API
+│   └── entrypoint.sh      # inicializa banco e sobe uvicorn
 └── pyproject.toml         # dependências e metadados do projeto
 ```
 
@@ -110,13 +113,13 @@ A coleta também pode ser disparada pela API via `POST /coletas` (executa em bac
 O container inclui o Chrome necessário para o crawler. Para subir tudo:
 
 ```bash
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 Para subir só o banco local e rodar a API no host:
 
 ```bash
-docker compose up -d db
+docker compose -f docker/docker-compose.yml up -d postgres
 uvicorn api.routes:app --reload
 ```
 

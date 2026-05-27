@@ -18,7 +18,7 @@ RUN playwright install chrome --with-deps
 
 COPY . .
 
-RUN chmod +x entrypoint.sh
+RUN chmod +x docker/entrypoint.sh
 
 EXPOSE 8000
-CMD ["./entrypoint.sh"]
+CMD ["./docker/entrypoint.sh"]
