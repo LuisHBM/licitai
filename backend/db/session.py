@@ -1,15 +1,28 @@
-import os
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from config import settings
 from db.models import Base, Estado, Modalidade
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/licitai"
-)
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+def _database_url() -> str:
+    if url := settings.get("DATABASE_URL"):
+        return url
+    host, port, name, user = settings.DB_HOST, settings.get("DB_PORT", 5432), settings.DB_NAME, settings.DB_USER
+    if not all([host, name, user]):
+        raise RuntimeError("Set DATABASE_URL or LICITAI_DB_HOST, LICITAI_DB_NAME, LICITAI_DB_USER.")
+    password = settings.get("DB_PASSWORD", "")
+    credentials = f"{user}:{password}" if password else str(user)
+    return f"postgresql://{credentials}@{host}:{port}/{name}"
+
+
+engine = create_engine(
+    _database_url(),
+    pool_pre_ping=True,
+    echo=settings.get("DB_ECHO", False),
+    pool_size=int(settings.get("DB_POOL_SIZE", 5)),
+    max_overflow=int(settings.get("DB_MAX_OVERFLOW", 10)),
+)
 Session = sessionmaker(bind=engine)
 
 _MODALIDADES = [

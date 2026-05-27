@@ -1,0 +1,15 @@
+# Env
+.env.*
+.env.local
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/*.py

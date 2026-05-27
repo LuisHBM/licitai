@@ -1,28 +1,32 @@
-# Ambiente virtual
-.venv/
-
-# Cache Python
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
-
-# Pytest
-.pytest_cache/
-
-# IDE
-.idea/
-.vscode/
-*.iml
-
-# Variáveis de ambiente
-.env
-.env.*
-!.env.example
-
-# Claude Code (configurações locais)
-.claude/settings.local.json
-
-# Distribuição / build
+.venv/
+*.egg-info/
 dist/
 build/
-*.egg-info/
+.eggs/
+.pytest_cache/
+
+# uv
+uv.lock
+
+# Secrets
+.secrets.local.toml
+settings.local.toml
+
+# Env (exceto .env raiz que zera VIRTUAL_ENV para o uv)
+.env.*
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/*.py

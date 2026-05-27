@@ -60,6 +60,30 @@ class PaginatedLicitacoes(BaseModel):
     resultados: list[LicitacaoResumo]
 
 
+class FacetModalidade(BaseModel):
+    id_modalidade: int
+    nome: str
+    total: int
+
+
+class FacetUF(BaseModel):
+    uf: str
+    nome: str
+    total: int
+
+
+class FacetSituacao(BaseModel):
+    situacao_id: int
+    total: int
+
+
+class FiltrosOut(BaseModel):
+    total: int
+    modalidades: list[FacetModalidade]
+    ufs: list[FacetUF]
+    situacoes: list[FacetSituacao]
+
+
 class ColetaSolicitacao(BaseModel):
     data_inicio: date
     data_fim: date

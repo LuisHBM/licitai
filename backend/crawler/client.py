@@ -3,6 +3,8 @@ import time
 
 import requests
 
+from crawler.schemas import PaginaContratacoes, PaginaItens
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://pncp.gov.br/api/consulta"
@@ -28,18 +30,12 @@ def _get(path: str, params: dict, timeout: int = 90) -> dict:
                 raise
             logger.warning(
                 "Tentativa %d/%d falhou (%s). Aguardando %ds...",
-                attempt,
-                len(_BACKOFF),
-                exc,
-                backoff,
+                attempt, len(_BACKOFF), exc, backoff,
             )
         except requests.RequestException as exc:
             logger.warning(
                 "Tentativa %d/%d falhou (%s). Aguardando %ds...",
-                attempt,
-                len(_BACKOFF),
-                exc,
-                backoff,
+                attempt, len(_BACKOFF), exc, backoff,
             )
 
         if attempt == len(_BACKOFF):
@@ -55,7 +51,7 @@ def fetch_contratacoes_page(
     modalidade: int,
     pagina: int,
     uf: str | None = None,
-) -> dict:
+) -> PaginaContratacoes:
     params: dict = {
         "dataInicial": data_inicial,
         "dataFinal": data_final,
@@ -65,9 +61,9 @@ def fetch_contratacoes_page(
     }
     if uf:
         params["uf"] = uf
-    return _get("/v1/contratacoes/publicacao", params)
+    return PaginaContratacoes.model_validate(_get("/v1/contratacoes/publicacao", params))
 
 
-def fetch_itens_page(cnpj: str, ano: int, sequencial: str, pagina: int) -> dict:
+def fetch_itens_page(cnpj: str, ano: int, sequencial: str, pagina: int) -> PaginaItens:
     path = f"/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/itens"
-    return _get(path, {"pagina": pagina, "tamanhoPagina": PAGE_SIZE})
+    return PaginaItens.model_validate(_get(path, {"pagina": pagina, "tamanhoPagina": PAGE_SIZE}))
