@@ -114,6 +114,25 @@ class ColetaAceita(BaseModel):
     uf: str | None
 
 
+class BuscaTextualRequest(BaseModel):
+    q: str
+    uf: str | None = None
+    modalidade: int | None = None
+    data_inicio: date | None = None
+    data_fim: date | None = None
+    situacao_id: int | None = None
+    pagina: int = 1
+    tamanho: int = 20
+
+
+class BuscaSemanticaRequest(BaseModel):
+    q: str
+    uf: str | None = None
+    modalidade: int | None = None
+    limite: int = 20
+
+
+
 class ColetaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -24,13 +24,10 @@ services:
     container_name: licitai_backend
     ports:
       - "8000:8000"
+    volumes:
+      - ../settings.local.toml:/app/settings.local.toml:ro
+      - ../.secrets.local.toml:/app/.secrets.local.toml:ro
     environment:
-      LICITAI_DB_HOST: postgres
-      LICITAI_DB_PORT: 5432
-      LICITAI_DB_PASSWORD: licitai
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   tests:
     build:
@@ -50,3 +47,7 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  default:
+    enable_ipv6: true

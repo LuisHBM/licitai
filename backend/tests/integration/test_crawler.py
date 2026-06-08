@@ -41,7 +41,7 @@ _CONTRATACAO = {
     "dataEncerramentoProposta": "2025-01-20T18:00:00",
     "dataInclusao": "2025-01-02T10:00:00",
     "dataAtualizacao": "2025-01-02T10:00:00",
-    "codigoModalidadeContratacao": 6,
+    "modalidadeId": 6,
     "orgaoEntidade": _ORGAO_DATA,
     "unidadeOrgao": _UNIDADE_DATA,
 }
@@ -133,7 +133,7 @@ class TestCrawl:
 
         crawl(
             data_inicio=date(2025, 1, 1),
-            data_fim=date(2025, 1, 7),
+            data_fim=date(2025, 1, 1),
             modalidades=[6],
             uf="BA",
             session=db_session,
@@ -182,20 +182,21 @@ class TestCrawl:
 
     @patch("crawler.etl._upsert_licitacao")
     @patch("crawler.client.fetch_contratacoes_page")
-    def test_erro_na_api_marca_coleta_erro(self, mock_fetch, mock_upsert, db_session):
+    def test_erro_na_api_pula_dia_e_conclui(self, mock_fetch, mock_upsert, db_session):
         mock_fetch.side_effect = RuntimeError("API fora do ar")
 
-        with pytest.raises(RuntimeError):
-            crawl(
-                data_inicio=date(2025, 1, 1),
-                data_fim=date(2025, 1, 7),
-                modalidades=[6],
-                uf=None,
-                session=db_session,
-            )
+        crawl(
+            data_inicio=date(2025, 1, 1),
+            data_fim=date(2025, 1, 7),
+            modalidades=[6],
+            uf=None,
+            session=db_session,
+        )
 
         coleta = db_session.query(Coleta).first()
-        assert coleta.status == "erro"
+        assert coleta.status == "concluido"
+        assert coleta.total_registros == 0
+        mock_upsert.assert_not_called()
 
     @patch("crawler.etl._upsert_licitacao")
     @patch("crawler.client.fetch_contratacoes_page")

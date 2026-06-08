@@ -190,7 +190,7 @@ class Embedding(Base):
         unique=True,
         nullable=False,
     )
-    vetor = Column(Vector(1536))
+    vetor = Column(Vector(3072))
     modelo = Column(String)
     criado_em = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

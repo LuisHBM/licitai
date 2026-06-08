@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from db import Session as DBSession
 from db.models import Coleta, Estado, Licitacao, Modalidade, Orgao, Unidade
+from embeddings.service import gerar_embedding_query, indexar_licitacoes
 from api.schemas import (
+    BuscaSemanticaRequest,
+    BuscaTextualRequest,
     ColetaAceita,
     ColetaOut,
     ColetaSolicitacao,
@@ -42,6 +45,14 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="LicitAI", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def ai_error_handler(request, exc):
+    from fastapi.responses import JSONResponse
+    if "credentials" in str(exc).lower() or "api" in type(exc).__name__.lower():
+        return JSONResponse(status_code=503, content={"detail": f"Serviço de IA indisponível: {exc}"})
+    raise exc
 
 
 def get_session():
@@ -309,3 +320,89 @@ def get_licitacao(
         orgao_razao_social=orgao_razao_social,
         modalidade_nome=modalidade_nome,
     )
+
+
+def _rows_to_resumos(rows) -> list[LicitacaoResumo]:
+    return [
+        LicitacaoResumo(
+            id_licitacao=lic.id_licitacao,
+            numero_controle_pncp=lic.numero_controle_pncp,
+            objeto_compra=lic.objeto_compra,
+            valor_total_estimado=lic.valor_total_estimado,
+            data_publicacao_pncp=lic.data_publicacao_pncp,
+            situacao_id=lic.situacao_id,
+            uf=uf,
+            modalidade_nome=modalidade_nome,
+        )
+        for lic, uf, _municipio, _cnpj, _razao, modalidade_nome in rows
+    ]
+
+
+def _base_query(session: Session):
+    return (
+        session.query(
+            Licitacao,
+            Unidade.uf,
+            Unidade.municipio,
+            Orgao.cnpj.label("orgao_cnpj"),
+            Orgao.razao_social.label("orgao_razao_social"),
+            Modalidade.nome.label("modalidade_nome"),
+        )
+        .join(Unidade, Licitacao.id_unidade == Unidade.id_unidade)
+        .join(Orgao, Unidade.id_orgao == Orgao.id_orgao)
+        .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade)
+    )
+
+
+@app.post("/busca/textual", response_model=PaginatedLicitacoes)
+def busca_textual(body: BuscaTextualRequest, session: Session = Depends(get_session)):
+    query = _aplicar_filtros(
+        _base_query(session),
+        q=body.q,
+        uf=body.uf,
+        modalidade=body.modalidade,
+        data_inicio=body.data_inicio,
+        data_fim=body.data_fim,
+        situacao_id=body.situacao_id,
+    )
+    total = query.count()
+    rows = (
+        query.order_by(Licitacao.data_publicacao_pncp.desc())
+        .offset((body.pagina - 1) * body.tamanho)
+        .limit(body.tamanho)
+        .all()
+    )
+    return PaginatedLicitacoes(
+        total=total, pagina=body.pagina, tamanho=body.tamanho, resultados=_rows_to_resumos(rows)
+    )
+
+
+def _buscar_por_vetor(session: Session, vetor: list, uf=None, modalidade=None, limite: int = 10):
+    from db.models import Embedding
+    from pgvector.sqlalchemy import Vector
+    from sqlalchemy import cast
+
+    query = (
+        _base_query(session)
+        .join(Embedding, Embedding.id_licitacao == Licitacao.id_licitacao)
+    )
+    if uf:
+        query = query.filter(Unidade.uf == uf.upper())
+    if modalidade:
+        query = query.filter(Licitacao.id_modalidade == modalidade)
+    return query.order_by(Embedding.vetor.op("<->")(cast(vetor, Vector))).limit(limite).all()
+
+
+@app.post("/busca/semantica", response_model=list[LicitacaoResumo])
+def busca_semantica(body: BuscaSemanticaRequest, session: Session = Depends(get_session)):
+    vetor = gerar_embedding_query(body.q)
+    rows = _buscar_por_vetor(session, vetor, uf=body.uf, modalidade=body.modalidade, limite=body.limite)
+    return _rows_to_resumos(rows)
+
+
+
+@app.post("/embeddings/indexar", status_code=202)
+def embeddings_indexar(background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
+    """Gera embeddings para licitações que ainda não foram indexadas."""
+    background_tasks.add_task(indexar_licitacoes, session)
+    return {"detail": "Indexação iniciada em background."}

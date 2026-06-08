@@ -1,5 +1,6 @@
 import atexit
 import logging
+import os
 import threading
 from urllib.parse import urlencode
 
@@ -33,7 +34,8 @@ def _init() -> None:
         return
     logger.info("Iniciando browser e carregando PNCP...")
     _playwright = sync_playwright().start()
-    browser = _playwright.chromium.launch(channel="chrome", headless=True, args=_LAUNCH_ARGS)
+    headless = os.environ.get("BROWSER_HEADLESS", "true").lower() != "false"
+    browser = _playwright.chromium.launch(channel="chrome", headless=headless, args=_LAUNCH_ARGS)
     context = browser.new_context(
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         viewport={"width": 1280, "height": 800},
