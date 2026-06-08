@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: licitai_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: licitai
+      POSTGRES_DB: licitai
+    ports:
+      - "5438:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: licitai_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/settings.local.toml:/app/settings.local.toml:ro
+      - ./backend/.secrets.local.toml:/app/.secrets.local.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: licitai_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    enable_ipv6: true
