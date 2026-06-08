@@ -1,7 +1,7 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "docker/Dockerfile"
 
 [deploy]
-healthcheckPath = "/"
+healthcheckPath = "/docs"
 restartPolicyType = "on_failure"
