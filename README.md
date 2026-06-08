@@ -2,8 +2,6 @@
 
 Sistema de coleta, armazenamento e consulta de licitações públicas brasileiras a partir do **PNCP** (Portal Nacional de Contratações Públicas), com suporte a busca por texto completo, filtros avançados e embeddings vetoriais para busca semântica por IA.
 
-Desenvolvido como Trabalho de Conclusão de Curso (TCC) na **UNEB**.
-
 ---
 
 ## Arquitetura
