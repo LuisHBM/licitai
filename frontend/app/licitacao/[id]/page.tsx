@@ -9,14 +9,6 @@ import { getLicitacao, type LicitacaoDetalhe, SITUACAO_LABEL, formatData, format
 import { ExternalLink, Copy, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-const MOCK_ITENS = [
-  { num: 1, descricao: 'Notebook Intel Core i7, 16GB RAM', quantidade: 50, unidade: 'UN', valor: 'R$ 4.500,00' },
-  { num: 2, descricao: 'Monitor LED 24 polegadas Full HD', quantidade: 50, unidade: 'UN', valor: 'R$ 850,00' },
-  { num: 3, descricao: 'Teclado USB ABNT2', quantidade: 50, unidade: 'UN', valor: 'R$ 120,00' },
-  { num: 4, descricao: 'Mouse óptico USB', quantidade: 50, unidade: 'UN', valor: 'R$ 45,00' },
-  { num: 5, descricao: 'Estabilizador 500VA', quantidade: 50, unidade: 'UN', valor: 'R$ 180,00' },
-];
-
 function getSituacao(id: number | null) {
   if (id === null) return null;
   return SITUACAO_LABEL[id] ?? `${id}`;
@@ -160,32 +152,9 @@ export default function DetalhePage() {
               </div>
             </div>
 
-            {/* Items — ainda mock (API não retorna itens no detalhe) */}
             <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
               <h2 className="text-[18px] text-[#111827] font-medium mb-4">Itens da licitação</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead className="bg-[#F5F7FA]">
-                    <tr>
-                      {['Nº', 'Descrição', 'Quantidade', 'Unidade', 'Valor unitário'].map((col) => (
-                        <th key={col} className="px-4 py-3 text-left text-[#111827] font-medium">{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E2E8F0]">
-                    {MOCK_ITENS.map((item) => (
-                      <tr key={item.num}>
-                        <td className="px-4 py-3 text-[#111827]">{item.num}</td>
-                        <td className="px-4 py-3 text-[#111827]">{item.descricao}</td>
-                        <td className="px-4 py-3 text-[#111827]">{item.quantidade}</td>
-                        <td className="px-4 py-3 text-[#111827]">{item.unidade}</td>
-                        <td className="px-4 py-3 text-[#111827]">{item.valor}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-3 text-[12px] text-[#6B7280]">Itens ilustrativos — endpoint de itens pendente no backend.</p>
+              <div className="text-[14px] text-[#6B7280]">Não há itens adicionais disponíveis para este edital.</div>
             </div>
           </div>
 

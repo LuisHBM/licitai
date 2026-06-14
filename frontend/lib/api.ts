@@ -45,6 +45,12 @@ export interface LicitacaoDetalhe {
   modalidade_nome: string | null;
 }
 
+export interface EstadoOut {
+  uf: string;
+  nome: string;
+  total: number;
+}
+
 export interface ColetaOut {
   id_coleta: string;
   status: string;
@@ -85,6 +91,30 @@ export const SITUACAO_COLOR: Record<number, string> = {
   7: 'bg-red-50 text-red-700 border-red-200',
 };
 
+export interface FacetModalidade {
+  id_modalidade: number;
+  nome: string;
+  total: number;
+}
+
+export interface FacetUF {
+  uf: string;
+  nome: string;
+  total: number;
+}
+
+export interface FacetSituacao {
+  situacao_id: number;
+  total: number;
+}
+
+export interface FiltrosOut {
+  total: number;
+  modalidades: FacetModalidade[];
+  ufs: FacetUF[];
+  situacoes: FacetSituacao[];
+}
+
 export function formatData(iso: string | null): string {
   if (!iso) return '—';
   const [year, month, day] = iso.substring(0, 10).split('-');
@@ -124,6 +154,28 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export async function getModalidades(): Promise<Modalidade[]> {
   return get('/modalidades');
+}
+
+export async function getEstados(): Promise<EstadoOut[]> {
+  return get('/estados');
+}
+
+export async function getFiltros(params: {
+  q?: string;
+  uf?: string;
+  modalidade?: number | null;
+  situacao_id?: number | null;
+  data_inicio?: string;
+  data_fim?: string;
+}): Promise<FiltrosOut> {
+  return get('/licitacoes/filtros', {
+    q: params.q || undefined,
+    uf: params.uf || undefined,
+    modalidade: params.modalidade ?? undefined,
+    situacao_id: params.situacao_id ?? undefined,
+    data_inicio: params.data_inicio || undefined,
+    data_fim: params.data_fim || undefined,
+  });
 }
 
 export async function buscarTextual(params: {

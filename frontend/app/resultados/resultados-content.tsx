@@ -9,6 +9,10 @@ import {
   buscarTextual,
   buscarSemantica,
   getModalidades,
+  getFiltros,
+  type FacetModalidade,
+  type FacetUF,
+  type FacetSituacao,
   type Modalidade,
   type LicitacaoResumo,
   SITUACAO_LABEL,
@@ -31,14 +35,6 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-
-const SITUACOES = [
-  { id: 1, label: 'Divulgada' },
-  { id: 5, label: 'Suspensa' },
-  { id: 3, label: 'Revogada' },
-];
-
 const SORT_OPTIONS = [
   { value: 'relevancia', label: 'Relevância' },
   { value: 'data_desc', label: 'Mais recentes' },
@@ -52,14 +48,16 @@ export function ResultadosContent() {
 
   const initialQuery = searchParams.get('q') ?? '';
   const initialMode = searchParams.get('mode') ?? 'semantica';
+  const initialUf = searchParams.get('uf') ?? '';
+  const initialModalidade = searchParams.get('modalidade') ? Number(searchParams.get('modalidade')) : null;
 
   const [inputValue, setInputValue] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
   const [isSemanticActive, setIsSemanticActive] = useState(initialMode === 'semantica');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [ufFilter, setUfFilter] = useState('');
-  const [modalidadeFilter, setModalidadeFilter] = useState<number | null>(null);
+  const [ufFilter, setUfFilter] = useState(initialUf);
+  const [modalidadeFilter, setModalidadeFilter] = useState<number | null>(initialModalidade);
   const [situacaoFilter, setSituacaoFilter] = useState<number | null>(null);
   const [valorMin, setValorMin] = useState('');
   const [valorMax, setValorMax] = useState('');
@@ -67,6 +65,9 @@ export function ResultadosContent() {
   const [dataFim, setDataFim] = useState('');
 
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
+  const [filtroModalidades, setFiltroModalidades] = useState<FacetModalidade[]>([]);
+  const [ufs, setUfs] = useState<FacetUF[]>([]);
+  const [situacoes, setSituacoes] = useState<FacetSituacao[]>([]);
   const [resultados, setResultados] = useState<LicitacaoResumo[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -76,6 +77,27 @@ export function ResultadosContent() {
   useEffect(() => {
     getModalidades().then(setModalidades).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    getFiltros({
+      q: query || undefined,
+      uf: ufFilter || undefined,
+      modalidade: modalidadeFilter,
+      situacao_id: situacaoFilter,
+      data_inicio: dataInicio || undefined,
+      data_fim: dataFim || undefined,
+    })
+      .then((resp) => {
+        setFiltroModalidades(resp.modalidades);
+        setUfs(resp.ufs);
+        setSituacoes(resp.situacoes);
+      })
+      .catch(() => {
+        setFiltroModalidades([]);
+        setUfs([]);
+        setSituacoes([]);
+      });
+  }, [query, ufFilter, modalidadeFilter, situacaoFilter, dataInicio, dataFim]);
 
   const hasActiveFilters = !!ufFilter || modalidadeFilter !== null || situacaoFilter !== null || !!valorMin || !!valorMax || !!dataInicio || !!dataFim;
 
@@ -286,7 +308,11 @@ export function ResultadosContent() {
                     className="w-full px-3 py-2 bg-[#F5F7FA] border border-[#E2E8F0] rounded text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]"
                   >
                     <option value="">Todos os estados</option>
-                    {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+                    {ufs.map((uf) => (
+                      <option key={uf.uf} value={uf.uf}>
+                        {uf.uf} — {uf.nome} ({uf.total})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -294,7 +320,7 @@ export function ResultadosContent() {
                 <div className="px-5 py-4">
                   <label className="block text-[12px] font-medium text-[#6B7280] uppercase tracking-wide mb-3">Modalidade</label>
                   <div className="space-y-2">
-                    {modalidades.map((m) => (
+                    {filtroModalidades.map((m) => (
                       <label key={m.id_modalidade} className="flex items-center gap-2 cursor-pointer group">
                         <input
                           type="radio"
@@ -303,7 +329,9 @@ export function ResultadosContent() {
                           onChange={() => { setModalidadeFilter(m.id_modalidade); setCurrentPage(1); }}
                           className="w-4 h-4 border-[#E2E8F0] accent-[#1A3A5C]"
                         />
-                        <span className="text-[13px] text-[#111827] group-hover:text-[#1A3A5C] transition-colors">{m.nome}</span>
+                        <span className="text-[13px] text-[#111827] group-hover:text-[#1A3A5C] transition-colors">
+                          {m.nome} ({m.total})
+                        </span>
                       </label>
                     ))}
                     {modalidadeFilter !== null && (
@@ -318,16 +346,18 @@ export function ResultadosContent() {
                 <div className="px-5 py-4">
                   <label className="block text-[12px] font-medium text-[#6B7280] uppercase tracking-wide mb-3">Situação</label>
                   <div className="space-y-2">
-                    {SITUACOES.map((s) => (
-                      <label key={s.id} className="flex items-center gap-2 cursor-pointer group">
+                    {situacoes.map((s) => (
+                      <label key={s.situacao_id} className="flex items-center gap-2 cursor-pointer group">
                         <input
                           type="radio"
                           name="situacao"
-                          checked={situacaoFilter === s.id}
-                          onChange={() => { setSituacaoFilter(s.id); setCurrentPage(1); }}
+                          checked={situacaoFilter === s.situacao_id}
+                          onChange={() => { setSituacaoFilter(s.situacao_id); setCurrentPage(1); }}
                           className="w-4 h-4 border-[#E2E8F0] accent-[#1A3A5C]"
                         />
-                        <span className="text-[13px] text-[#111827] group-hover:text-[#1A3A5C] transition-colors">{s.label}</span>
+                        <span className="text-[13px] text-[#111827] group-hover:text-[#1A3A5C] transition-colors">
+                          {SITUACAO_LABEL[s.situacao_id] ?? `Situação ${s.situacao_id}`} ({s.total})
+                        </span>
                       </label>
                     ))}
                     {situacaoFilter !== null && (

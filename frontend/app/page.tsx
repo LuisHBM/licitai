@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { SlidersHorizontal } from 'lucide-react';
+import { getEstados, getModalidades, type EstadoOut, type Modalidade } from '@/lib/api';
 
 const QUICK_FILTERS = [
   'Pregão Eletrônico',
@@ -12,28 +13,30 @@ const QUICK_FILTERS = [
   'Dispensa de Licitação',
 ];
 
-const UFS = [
-  { value: 'BA', label: 'Bahia' },
-  { value: 'SP', label: 'São Paulo' },
-  { value: 'RJ', label: 'Rio de Janeiro' },
-  { value: 'MG', label: 'Minas Gerais' },
-  { value: 'RS', label: 'Rio Grande do Sul' },
-  { value: 'PR', label: 'Paraná' },
-  { value: 'SC', label: 'Santa Catarina' },
-  { value: 'GO', label: 'Goiás' },
-  { value: 'DF', label: 'Distrito Federal' },
-];
-
 export default function HomePage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSemanticActive, setIsSemanticActive] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
+  const [ufFilter, setUfFilter] = useState('');
+  const [modalidadeFilter, setModalidadeFilter] = useState('');
+
+  const [estados, setEstados] = useState<EstadoOut[]>([]);
+  const [modalidades, setModalidades] = useState<Modalidade[]>([]);
+
+  useEffect(() => {
+    getEstados().then(setEstados).catch(() => {});
+    getModalidades().then(setModalidades).catch(() => {});
+  }, []);
+
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
     const mode = isSemanticActive ? 'semantica' : 'textual';
-    router.push(`/resultados?q=${encodeURIComponent(searchQuery.trim())}&mode=${mode}`);
+    const params = new URLSearchParams({ q: searchQuery.trim(), mode });
+    if (ufFilter) params.set('uf', ufFilter);
+    if (modalidadeFilter) params.set('modalidade', modalidadeFilter);
+    router.push(`/resultados?${params.toString()}`);
   };
 
   return (
@@ -107,10 +110,14 @@ export default function HomePage() {
                   <label className="block text-[13px] text-[#111827] font-medium mb-2">
                     Estado (UF)
                   </label>
-                  <select className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]">
+                  <select
+                    value={ufFilter}
+                    onChange={(e) => setUfFilter(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]"
+                  >
                     <option value="">Todos os estados</option>
-                    {UFS.map((uf) => (
-                      <option key={uf.value} value={uf.value}>{uf.label}</option>
+                    {estados.map((e) => (
+                      <option key={e.uf} value={e.uf}>{e.uf} — {e.nome}</option>
                     ))}
                   </select>
                 </div>
@@ -118,12 +125,15 @@ export default function HomePage() {
                   <label className="block text-[13px] text-[#111827] font-medium mb-2">
                     Modalidade
                   </label>
-                  <select className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]">
+                  <select
+                    value={modalidadeFilter}
+                    onChange={(e) => setModalidadeFilter(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]"
+                  >
                     <option value="">Todas</option>
-                    <option value="pregao">Pregão Eletrônico</option>
-                    <option value="dispensa">Dispensa</option>
-                    <option value="concorrencia">Concorrência</option>
-                    <option value="inexigibilidade">Inexigibilidade</option>
+                    {modalidades.map((m) => (
+                      <option key={m.id_modalidade} value={m.id_modalidade}>{m.nome}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
