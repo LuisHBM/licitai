@@ -124,6 +124,9 @@ export function ResultadosContent() {
           limite: 100,
         });
         let filtered = rows;
+        if (situacaoFilter !== null) filtered = filtered.filter((r) => r.situacao_id === situacaoFilter);
+        if (dataInicio) filtered = filtered.filter((r) => r.data_publicacao_pncp != null && r.data_publicacao_pncp >= dataInicio);
+        if (dataFim) filtered = filtered.filter((r) => r.data_publicacao_pncp != null && r.data_publicacao_pncp <= dataFim);
         if (valorMin) filtered = filtered.filter((r) => parseFloat(r.valor_total_estimado ?? '0') >= Number(valorMin));
         if (valorMax) filtered = filtered.filter((r) => parseFloat(r.valor_total_estimado ?? '0') <= Number(valorMax));
         setTotal(filtered.length);

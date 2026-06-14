@@ -285,7 +285,7 @@ def search_licitacoes(
     )
 
 
-@app.get("/licitacoes/{numero_controle_pncp}", response_model=LicitacaoDetalhe)
+@app.get("/licitacoes/{numero_controle_pncp:path}", response_model=LicitacaoDetalhe)
 def get_licitacao(
     numero_controle_pncp: str,
     session: Session = Depends(get_session),

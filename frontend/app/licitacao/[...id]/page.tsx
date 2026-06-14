@@ -26,7 +26,9 @@ function pncpUrl(numero: string): string {
 
 export default function DetalhePage() {
   const params = useParams();
-  const numeroPncp = decodeURIComponent(params.id as string);
+  // catch-all params.id is an array of path segments; join with '/' and decode each
+  const idArr = Array.isArray(params.id) ? params.id : [params.id as string];
+  const numeroPncp = idArr.map((s) => decodeURIComponent(s)).join('/');
 
   const [licitacao, setLicitacao] = useState<LicitacaoDetalhe | null>(null);
   const [loading, setLoading] = useState(true);
