@@ -116,15 +116,15 @@ export interface FiltrosOut {
 }
 
 export function formatData(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return 'Sem data';
   const [year, month, day] = iso.substring(0, 10).split('-');
   return `${day}/${month}/${year}`;
 }
 
 export function formatValor(valor: string | number | null): string {
-  if (valor === null || valor === undefined) return '—';
+  if (valor === null || valor === undefined) return 'Não informado';
   const n = typeof valor === 'string' ? parseFloat(valor) : valor;
-  if (isNaN(n)) return '—';
+  if (isNaN(n)) return 'Não informado';
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 

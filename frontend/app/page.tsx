@@ -46,7 +46,7 @@ export default function HomePage() {
       <main className="max-w-5xl mx-auto px-8 py-24">
         <div className="text-center mb-12">
           <h1 className="text-[24px] text-[#111827] font-medium">
-            Encontre licitações públicas com inteligência
+            Busque licitações públicas
           </h1>
         </div>
 
@@ -117,7 +117,7 @@ export default function HomePage() {
                   >
                     <option value="">Todos os estados</option>
                     {estados.map((e) => (
-                      <option key={e.uf} value={e.uf}>{e.uf} — {e.nome}</option>
+                      <option key={e.uf} value={e.uf}>{e.uf}, {e.nome}</option>
                     ))}
                   </select>
                 </div>
@@ -179,7 +179,7 @@ export default function HomePage() {
 
       <footer className="border-t border-[#E2E8F0] py-6 mt-24">
         <div className="max-w-5xl mx-auto px-8 text-center text-[13px] text-[#6B7280]">
-          Dados extraídos do PNCP — Portal Nacional de Contratações Públicas
+          Dados do PNCP (Portal Nacional de Contratações Públicas)
         </div>
       </footer>
     </div>

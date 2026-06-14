@@ -37,7 +37,7 @@ export default function DetalhePage() {
   useEffect(() => {
     getLicitacao(numeroPncp)
       .then(setLicitacao)
-      .catch(() => setError('Licitação não encontrada ou API indisponível.'))
+      .catch(() => setError('Licitação não encontrada.'))
       .finally(() => setLoading(false));
   }, [numeroPncp]);
 
@@ -112,22 +112,22 @@ export default function DetalhePage() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="text-[13px] text-[#6B7280] mb-1">Órgão contratante</div>
-                  <div className="text-[16px] text-[#111827]">{licitacao.orgao_razao_social ?? '—'}</div>
+                  <div className="text-[16px] text-[#111827]">{licitacao.orgao_razao_social ?? 'Não informado'}</div>
                 </div>
                 <div>
                   <div className="text-[13px] text-[#6B7280] mb-1">CNPJ</div>
-                  <div className="text-[16px] text-[#111827] font-mono">{licitacao.orgao_cnpj ?? '—'}</div>
+                  <div className="text-[16px] text-[#111827] font-mono">{licitacao.orgao_cnpj ?? 'Não informado'}</div>
                 </div>
                 <div>
                   <div className="text-[13px] text-[#6B7280] mb-1">Município / UF</div>
                   <div className="text-[16px] text-[#111827]">
-                    {[licitacao.municipio, licitacao.uf].filter(Boolean).join(', ') || '—'}
+                    {[licitacao.municipio, licitacao.uf].filter(Boolean).join(', ') || 'Não informado'}
                   </div>
                 </div>
                 <div>
                   <div className="text-[13px] text-[#6B7280] mb-1">Número da compra</div>
                   <div className="text-[16px] text-[#111827] font-mono">
-                    {licitacao.numero_compra ? `${licitacao.numero_compra}/${licitacao.ano_compra}` : '—'}
+                    {licitacao.numero_compra ? `${licitacao.numero_compra}/${licitacao.ano_compra}` : 'Não informado'}
                   </div>
                 </div>
               </div>
@@ -156,7 +156,7 @@ export default function DetalhePage() {
 
             <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
               <h2 className="text-[18px] text-[#111827] font-medium mb-4">Itens da licitação</h2>
-              <div className="text-[14px] text-[#6B7280]">Não há itens adicionais disponíveis para este edital.</div>
+              <div className="text-[14px] text-[#6B7280]">Nenhum item disponível para este edital.</div>
             </div>
           </div>
 

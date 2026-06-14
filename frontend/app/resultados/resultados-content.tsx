@@ -151,7 +151,7 @@ export function ResultadosContent() {
         setResultados(filtered);
       }
     } catch (e) {
-      setError('Não foi possível conectar à API. Verifique se o backend está rodando.');
+      setError('Não foi possível carregar os resultados. Tente novamente em instantes.');
       setResultados([]);
       setTotal(0);
     } finally {
@@ -313,7 +313,7 @@ export function ResultadosContent() {
                     <option value="">Todos os estados</option>
                     {ufs.map((uf) => (
                       <option key={uf.uf} value={uf.uf}>
-                        {uf.uf} — {uf.nome} ({uf.total})
+                        {uf.uf}, {uf.nome} ({uf.total})
                       </option>
                     ))}
                   </select>
@@ -433,7 +433,7 @@ export function ResultadosContent() {
               <div className="bg-white border border-[#E2E8F0] rounded-lg py-20 text-center">
                 <Search className="w-10 h-10 text-[#E2E8F0] mx-auto mb-4" />
                 <p className="text-[16px] text-[#111827] font-medium mb-1">Nenhuma licitação encontrada</p>
-                <p className="text-[13px] text-[#6B7280] mb-4">Tente outros termos ou remova alguns filtros.</p>
+                <p className="text-[13px] text-[#6B7280] mb-4">Tente outros termos ou ajuste os filtros.</p>
                 <button onClick={clearAllFilters} className="px-4 py-2 text-[13px] text-[#2E6DA4] border border-[#2E6DA4] rounded hover:bg-[#F5F7FA] transition-colors">
                   Limpar filtros
                 </button>
@@ -442,7 +442,7 @@ export function ResultadosContent() {
               <>
                 <div className="space-y-3">
                   {resultados.map((lic) => {
-                    const situacaoLabel = lic.situacao_id != null ? (SITUACAO_LABEL[lic.situacao_id] ?? `${lic.situacao_id}`) : '—';
+                    const situacaoLabel = lic.situacao_id != null ? (SITUACAO_LABEL[lic.situacao_id] ?? `${lic.situacao_id}`) : '';
                     const situacaoCls = lic.situacao_id != null ? (SITUACAO_COLOR[lic.situacao_id] ?? 'bg-gray-50 text-gray-600 border-gray-200') : '';
                     return (
                       <div key={lic.id_licitacao} className="bg-white border border-[#E2E8F0] rounded-lg p-5 hover:border-[#2E6DA4] hover:shadow-sm transition-all group">
@@ -511,7 +511,7 @@ export function ResultadosContent() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-8">
                     <p className="text-[13px] text-[#6B7280]">
-                      Exibindo {(currentPage - 1) * PER_PAGE + 1}–{Math.min(currentPage * PER_PAGE, total)} de {total}
+                      Exibindo {(currentPage - 1) * PER_PAGE + 1} a {Math.min(currentPage * PER_PAGE, total)} de {total}
                     </p>
                     <div className="flex items-center gap-1">
                       <button

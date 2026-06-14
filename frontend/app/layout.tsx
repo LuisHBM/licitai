@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'LicitAI — Busca inteligente de licitações',
-  description: 'Encontre licitações públicas com inteligência. Dados do PNCP com busca semântica.',
+  title: 'LicitAI | Busca de licitações públicas',
+  description: 'Busque licitações públicas. Dados do PNCP com busca semântica.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

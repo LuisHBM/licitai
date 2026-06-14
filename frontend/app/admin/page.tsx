@@ -35,7 +35,7 @@ const EXPORT_BUTTONS = [
 ];
 
 function formatDateTime(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return 'N/D';
   const d = new Date(iso);
   return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
@@ -369,7 +369,7 @@ export default function PainelAdminPage() {
                         {formatDateRange(c.data_inicio_coleta, c.data_fim_coleta)}
                       </td>
                       <td className="px-5 py-3.5 text-[#111827]">
-                        {c.total_registros?.toLocaleString('pt-BR') ?? '—'}
+                        {c.total_registros?.toLocaleString('pt-BR') ?? 'N/D'}
                       </td>
                       <td className="px-5 py-3.5">
                         {c.status === 'concluido' || c.status === 'concluída' ? (
