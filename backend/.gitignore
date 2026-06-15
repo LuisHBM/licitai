@@ -28,5 +28,3 @@ settings.local.toml
 .DS_Store
 Thumbs.db
 
-# Alembic
-alembic/versions/*.py
