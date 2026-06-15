@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 import uuid
 from datetime import timedelta
@@ -12,7 +13,7 @@ from db.models import Coleta, Licitacao, Orgao, Unidade
 
 logger = logging.getLogger(__name__)
 
-PAGE_DELAY = 1.0
+PAGE_DELAY = 2.0
 
 
 def _get_or_create_orgao(session: Session, orgao: OrgaoEntidade, cache: dict) -> uuid.UUID:
@@ -140,6 +141,7 @@ def crawl(
                 first_page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=1, uf=uf)
             except Exception as exc:
                 logger.error("  Dia %s falhou: %s. Pulando para o próximo...", dia_str, exc)
+                time.sleep(random.uniform(1.0, 3.0))
                 continue
 
             logger.info("  Dia %s — %d registros em %d páginas", dia_str, first_page.totalRegistros, first_page.totalPaginas)
