@@ -144,3 +144,37 @@ class ColetaOut(BaseModel):
     data_fim_coleta: date
     total_registros: int
     executado_em: datetime | None
+
+
+# ── camada analítica (star schema / OLAP) ────────────────────────────────────
+
+
+class RebuildResult(BaseModel):
+    mensagem: str
+    contagens: dict[str, int]
+
+
+class PainelResumo(BaseModel):
+    total: int
+    valor_total_estimado: float
+    valor_medio: float
+    abertas: int
+
+
+class PainelPonto(BaseModel):
+    name: str
+    value: int
+
+
+class PainelMes(BaseModel):
+    mes: str
+    ano_mes: str
+    total: int
+
+
+class PainelUF(BaseModel):
+    name: str
+    federal: int
+    estadual: int
+    municipal: int
+    outros: int

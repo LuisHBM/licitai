@@ -198,3 +198,111 @@ class Embedding(Base):
     criado_em = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     licitacao = relationship("Licitacao")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Modelo dimensional (star schema) — alimenta a camada analítica / OLAP.
+# Tabelas populadas pelo ETL em analytics/star_schema.py a partir das tabelas
+# operacionais acima. Grão do fato: uma linha por licitação.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class DimTempo(Base):
+    """Dimensão de tempo, derivada de licitacao.data_publicacao_pncp."""
+
+    __tablename__ = "dim_tempo"
+
+    id_tempo = Column(Integer, primary_key=True, autoincrement=False)  # YYYYMMDD
+    data = Column(Date, nullable=False)
+    ano = Column(Integer, nullable=False)
+    trimestre = Column(Integer, nullable=False)
+    mes = Column(Integer, nullable=False)
+    nome_mes = Column(String, nullable=False)        # "Janeiro"
+    mes_abrev = Column(String, nullable=False)        # "Jan"
+    ano_mes = Column(String, nullable=False)          # "2026-01"
+    quadrienal = Column(String, nullable=False)       # "2025-2028"
+
+    fatos = relationship("FatoLicitacao", back_populates="tempo")
+
+
+class DimModalidade(Base):
+    """Dimensão de modalidade de contratação."""
+
+    __tablename__ = "dim_modalidade"
+
+    id_dim_modalidade = Column(Integer, primary_key=True, autoincrement=False)
+    nome = Column(String, nullable=False)
+
+    fatos = relationship("FatoLicitacao", back_populates="modalidade")
+
+
+class DimUf(Base):
+    """Dimensão geográfica por unidade federativa."""
+
+    __tablename__ = "dim_uf"
+
+    uf = Column(String(2), primary_key=True)
+    nome = Column(String, nullable=False)
+    regiao = Column(String, nullable=False)
+
+    fatos = relationship("FatoLicitacao", back_populates="estado")
+
+
+class DimOrgao(Base):
+    """Dimensão de órgão contratante (órgão + unidade achatados)."""
+
+    __tablename__ = "dim_orgao"
+
+    id_dim_orgao = Column(UUID(as_uuid=True), primary_key=True)  # = id_unidade
+    cnpj = Column(String(14))
+    razao_social = Column(String)
+    esfera = Column(String(1))
+    poder = Column(String(1))
+    nome_unidade = Column(String)
+    municipio = Column(String)
+    codigo_ibge = Column(String)
+    uf = Column(String(2))
+
+    fatos = relationship("FatoLicitacao", back_populates="orgao")
+
+
+class FatoLicitacao(Base):
+    """Tabela fato. Grão: uma licitação. Métricas: valores e contagens."""
+
+    __tablename__ = "fato_licitacao"
+
+    id_fato = Column(UUID(as_uuid=True), primary_key=True)  # = id_licitacao
+    id_tempo = Column(Integer, ForeignKey("dim_tempo.id_tempo"), nullable=True)
+    id_dim_orgao = Column(
+        UUID(as_uuid=True), ForeignKey("dim_orgao.id_dim_orgao"), nullable=True
+    )
+    id_dim_modalidade = Column(
+        Integer, ForeignKey("dim_modalidade.id_dim_modalidade"), nullable=True
+    )
+    uf = Column(String(2), ForeignKey("dim_uf.uf"), nullable=True)
+
+    # dimensões degeneradas (atributos que vivem no próprio fato)
+    numero_controle_pncp = Column(String)
+    situacao_id = Column(Integer)
+    situacao_nome = Column(String)
+    modo_disputa_nome = Column(String)
+    srp = Column(Boolean)
+    ano_compra = Column(Integer)
+
+    # métricas (aditivas)
+    valor_estimado = Column(Numeric(18, 2))
+    valor_homologado = Column(Numeric(18, 2))
+    economia = Column(Numeric(18, 2))
+    qtd_itens = Column(Integer, default=0)
+
+    tempo = relationship("DimTempo", back_populates="fatos")
+    orgao = relationship("DimOrgao", back_populates="fatos")
+    modalidade = relationship("DimModalidade", back_populates="fatos")
+    estado = relationship("DimUf", back_populates="fatos")
+
+    __table_args__ = (
+        Index("ix_fato_tempo", "id_tempo"),
+        Index("ix_fato_modalidade", "id_dim_modalidade"),
+        Index("ix_fato_uf", "uf"),
+        Index("ix_fato_orgao", "id_dim_orgao"),
+    )

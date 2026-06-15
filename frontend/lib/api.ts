@@ -225,3 +225,91 @@ export async function getColetas(): Promise<ColetaOut[]> {
 export async function iniciarColeta(body: ColetaSolicitacao): Promise<void> {
   await post('/coletas', body);
 }
+
+// ── camada analítica (star schema / OLAP) ────────────────────────────────────
+
+export interface PainelResumo {
+  total: number;
+  valor_total_estimado: number;
+  valor_medio: number;
+  abertas: number;
+}
+
+export interface PainelPonto {
+  name: string;
+  value: number;
+}
+
+export interface PainelMes {
+  mes: string;
+  ano_mes: string;
+  total: number;
+}
+
+export interface PainelUF {
+  name: string;
+  federal: number;
+  estadual: number;
+  municipal: number;
+  outros: number;
+}
+
+export interface PainelData {
+  resumo: PainelResumo;
+  modalidade: PainelPonto[];
+  mes: PainelMes[];
+  orgaos: PainelPonto[];
+  uf: PainelUF[];
+}
+
+export interface RebuildResult {
+  mensagem: string;
+  contagens: Record<string, number>;
+}
+
+/** Reconstrói o star schema (dimensões + fato) a partir das tabelas operacionais. */
+export async function rebuildAnalitico(): Promise<RebuildResult> {
+  return post('/analitico/rebuild', {});
+}
+
+/** Tabelas do star schema exportáveis em CSV. */
+export const CSV_TABELAS = [
+  'fato_licitacao',
+  'dim_orgao',
+  'dim_tempo',
+  'dim_modalidade',
+  'dim_uf',
+] as const;
+
+/** URL de download do CSV de uma tabela do star schema. */
+export function csvUrl(tabela: string): string {
+  return `${API_URL}/analitico/csv/${tabela}`;
+}
+
+/** Baixa o CSV de uma tabela do star schema, disparando o download no browser. */
+export async function baixarCsv(tabela: string): Promise<void> {
+  const res = await fetch(csvUrl(tabela));
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${tabela}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Busca tudo que o painel analítico precisa, em paralelo. `dias` filtra o período. */
+export async function getPainel(dias?: number | null): Promise<PainelData> {
+  const p = dias ? { dias } : undefined;
+  const [resumo, modalidade, mes, orgaos, uf] = await Promise.all([
+    get<PainelResumo>('/analitico/resumo', p),
+    get<PainelPonto[]>('/analitico/por-modalidade', p),
+    get<PainelMes[]>('/analitico/por-mes', p),
+    get<PainelPonto[]>('/analitico/top-orgaos', p),
+    get<PainelUF[]>('/analitico/por-uf', p),
+  ]);
+  return { resumo, modalidade, mes, orgaos, uf };
+}

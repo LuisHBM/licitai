@@ -24,7 +24,12 @@ from api.schemas import (
     LicitacaoDetalhe,
     LicitacaoResumo,
     ModalidadeOut,
+    PainelMes,
+    PainelPonto,
+    PainelResumo,
+    PainelUF,
     PaginatedLicitacoes,
+    RebuildResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +79,7 @@ def _executar_coleta(
     modalidades: list[int],
     uf: str | None,
 ) -> None:
+    from analytics import rebuild_star_schema
     from crawler.etl import crawl
 
     try:
@@ -85,6 +91,9 @@ def _executar_coleta(
                 uf=uf,
                 session=session,
             )
+            # Atualiza o modelo dimensional com os dados recém-coletados.
+            contagens = rebuild_star_schema(session)
+            logger.info("Star schema reconstruído após coleta: %s", contagens)
     except Exception as exc:
         logger.error("Coleta em background falhou: %s", exc)
 
@@ -402,3 +411,88 @@ def embeddings_indexar(background_tasks: BackgroundTasks, session: Session = Dep
     """Gera embeddings para licitações que ainda não foram indexadas."""
     background_tasks.add_task(indexar_licitacoes, session)
     return {"detail": "Indexação iniciada em background."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Camada analítica (star schema / OLAP) — Sprint V
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@app.post("/analitico/rebuild", response_model=RebuildResult)
+def analitico_rebuild(session: Session = Depends(get_session)):
+    """Reconstrói o modelo dimensional (dimensões + fato) a partir das tabelas
+    operacionais. Deve ser executado após cada coleta."""
+    from analytics import rebuild_star_schema
+
+    contagens = rebuild_star_schema(session)
+    return RebuildResult(mensagem="Star schema reconstruído.", contagens=contagens)
+
+
+@app.get("/analitico/resumo", response_model=PainelResumo)
+def analitico_resumo(
+    dias: int | None = Query(default=None, ge=1),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_resumo
+
+    return PainelResumo(**painel_resumo(session, dias))
+
+
+@app.get("/analitico/por-modalidade", response_model=list[PainelPonto])
+def analitico_por_modalidade(
+    dias: int | None = Query(default=None, ge=1),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_por_modalidade
+
+    return [PainelPonto(**p) for p in painel_por_modalidade(session, dias)]
+
+
+@app.get("/analitico/por-mes", response_model=list[PainelMes])
+def analitico_por_mes(
+    dias: int | None = Query(default=None, ge=1),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_por_mes
+
+    return [PainelMes(**p) for p in painel_por_mes(session, dias)]
+
+
+@app.get("/analitico/top-orgaos", response_model=list[PainelPonto])
+def analitico_top_orgaos(
+    dias: int | None = Query(default=None, ge=1),
+    limite: int = Query(default=10, ge=1, le=50),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_top_orgaos
+
+    return [PainelPonto(**p) for p in painel_top_orgaos(session, dias, limite)]
+
+
+@app.get("/analitico/por-uf", response_model=list[PainelUF])
+def analitico_por_uf(
+    dias: int | None = Query(default=None, ge=1),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_por_uf
+
+    return [PainelUF(**p) for p in painel_por_uf(session, dias)]
+
+
+@app.get("/analitico/csv/{tabela}")
+def analitico_csv(tabela: str, session: Session = Depends(get_session)):
+    """Exporta uma tabela do star schema em CSV para a ferramenta OLAP (Power BI)."""
+    from fastapi.responses import StreamingResponse
+
+    from analytics import CSV_TABELAS, gerar_csv
+
+    if tabela not in CSV_TABELAS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Tabela inválida. Opções: {', '.join(CSV_TABELAS)}",
+        )
+    return StreamingResponse(
+        gerar_csv(session, tabela),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{tabela}.csv"'},
+    )

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -13,47 +13,42 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Header } from '@/components/header';
+import { getPainel, formatValor, type PainelData } from '@/lib/api';
 
-const MODALIDADE_DATA = [
-  { name: 'Pregão Eletrônico', value: 45000 },
-  { name: 'Dispensa', value: 28000 },
-  { name: 'Concorrência', value: 12000 },
-  { name: 'Inexigibilidade', value: 8500 },
-];
-
-const PUBLICACOES_DATA = [
-  { mes: 'Jan', total: 8500 },
-  { mes: 'Fev', total: 9200 },
-  { mes: 'Mar', total: 11000 },
-  { mes: 'Abr', total: 10500 },
-  { mes: 'Mai', total: 12300 },
-];
-
-const ORGAOS_DATA = [
-  { name: 'Min. da Saúde', value: 15000 },
-  { name: 'Min. da Educação', value: 13500 },
-  { name: 'Min. da Infraestrutura', value: 11200 },
-  { name: 'Min. da Defesa', value: 9800 },
-  { name: 'Min. da Ciência e Tecnologia', value: 8900 },
-];
-
-const UF_DATA = [
-  { name: 'SP', federal: 12000, estadual: 8500, municipal: 5200 },
-  { name: 'RJ', federal: 9500, estadual: 6800, municipal: 4100 },
-  { name: 'MG', federal: 8200, estadual: 5900, municipal: 3600 },
-  { name: 'BA', federal: 7100, estadual: 5200, municipal: 3100 },
-  { name: 'RS', federal: 6800, estadual: 4800, municipal: 2900 },
-];
-
-const METRIC_CARDS = [
-  { label: 'Total de licitações indexadas', value: '1.234.567' },
-  { label: 'Valor total estimado', value: 'R$ 45,2 bi' },
-  { label: 'Média por licitação', value: 'R$ 36.623' },
-  { label: 'Licitações com propostas abertas', value: '4.582' },
-];
+const PERIODOS: Record<string, number | null> = {
+  '30': 30,
+  '90': 90,
+  '365': 365,
+  todos: null,
+};
 
 export default function PainelPage() {
-  const [period, setPeriod] = useState('30');
+  const [period, setPeriod] = useState('365');
+  const [data, setData] = useState<PainelData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    setLoading(true);
+    setErro(null);
+    getPainel(PERIODOS[period])
+      .then((d) => ativo && setData(d))
+      .catch((e) => ativo && setErro(String(e)))
+      .finally(() => ativo && setLoading(false));
+    return () => {
+      ativo = false;
+    };
+  }, [period]);
+
+  const cards = data
+    ? [
+        { label: 'Total de licitações indexadas', value: data.resumo.total.toLocaleString('pt-BR') },
+        { label: 'Valor total estimado', value: formatValor(data.resumo.valor_total_estimado) },
+        { label: 'Média por licitação', value: formatValor(data.resumo.valor_medio) },
+        { label: 'Licitações divulgadas (abertas)', value: data.resumo.abertas.toLocaleString('pt-BR') },
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-white">
@@ -70,91 +65,104 @@ export default function PainelPage() {
             <option value="30">Últimos 30 dias</option>
             <option value="90">Últimos 90 dias</option>
             <option value="365">Último ano</option>
+            <option value="todos">Todo o período</option>
           </select>
         </div>
 
-        {/* Metric cards */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          {METRIC_CARDS.map((card) => (
-            <div key={card.label} className="bg-[#F5F7FA] rounded-lg p-6">
-              <div className="text-[13px] text-[#6B7280] mb-2">{card.label}</div>
-              <div className="text-[24px] text-[#1A3A5C] font-medium">{card.value}</div>
+        {erro && (
+          <div className="mb-8 rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-700">
+            Não foi possível carregar os dados analíticos: {erro}
+          </div>
+        )}
+
+        {loading && !data ? (
+          <div className="py-24 text-center text-[14px] text-[#6B7280]">Carregando…</div>
+        ) : data ? (
+          <>
+            {/* Metric cards */}
+            <div className="grid grid-cols-4 gap-6 mb-8">
+              {cards.map((card) => (
+                <div key={card.label} className="bg-[#F5F7FA] rounded-lg p-6">
+                  <div className="text-[13px] text-[#6B7280] mb-2">{card.label}</div>
+                  <div className="text-[24px] text-[#1A3A5C] font-medium">{card.value}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-2 gap-8">
-          <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
-            <h2 className="text-[18px] text-[#111827] font-medium mb-6">
-              Licitações por modalidade
-            </h2>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={MODALIDADE_DATA} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis type="number" stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={150}
-                  stroke="#6B7280"
-                  style={{ fontSize: '13px' }}
-                />
-                <Tooltip />
-                <Bar dataKey="value" fill="#1A3A5C" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            {/* Charts */}
+            <div className="grid grid-cols-2 gap-8">
+              <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
+                <h2 className="text-[18px] text-[#111827] font-medium mb-6">
+                  Licitações por modalidade
+                </h2>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data.modalidade} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis type="number" stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={150}
+                      stroke="#6B7280"
+                      style={{ fontSize: '13px' }}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#1A3A5C" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-          <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
-            <h2 className="text-[18px] text-[#111827] font-medium mb-6">Publicações por mês</h2>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={PUBLICACOES_DATA}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="mes" stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <YAxis stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="total" stroke="#2E6DA4" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+              <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
+                <h2 className="text-[18px] text-[#111827] font-medium mb-6">Publicações por mês</h2>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={data.mes}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis dataKey="mes" stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <YAxis stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="total" stroke="#2E6DA4" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
 
-          <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
-            <h2 className="text-[18px] text-[#111827] font-medium mb-6">
-              Top 10 órgãos por volume
-            </h2>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={ORGAOS_DATA} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis type="number" stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={180}
-                  stroke="#6B7280"
-                  style={{ fontSize: '13px' }}
-                />
-                <Tooltip />
-                <Bar dataKey="value" fill="#2E6DA4" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
+                <h2 className="text-[18px] text-[#111827] font-medium mb-6">
+                  Top 10 órgãos por volume
+                </h2>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data.orgaos} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis type="number" stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={180}
+                      stroke="#6B7280"
+                      style={{ fontSize: '13px' }}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#2E6DA4" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-          <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
-            <h2 className="text-[18px] text-[#111827] font-medium mb-6">Distribuição por UF</h2>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={UF_DATA}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <YAxis stroke="#6B7280" style={{ fontSize: '13px' }} />
-                <Tooltip />
-                <Bar dataKey="federal" stackId="a" fill="#1A3A5C" name="Federal" />
-                <Bar dataKey="estadual" stackId="a" fill="#2E6DA4" name="Estadual" />
-                <Bar dataKey="municipal" stackId="a" fill="#6B7280" name="Municipal" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+              <div className="bg-white border border-[#E2E8F0] rounded-lg p-6">
+                <h2 className="text-[18px] text-[#111827] font-medium mb-6">Distribuição por UF</h2>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data.uf}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis dataKey="name" stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <YAxis stroke="#6B7280" style={{ fontSize: '13px' }} />
+                    <Tooltip />
+                    <Bar dataKey="federal" stackId="a" fill="#1A3A5C" name="Federal" />
+                    <Bar dataKey="estadual" stackId="a" fill="#2E6DA4" name="Estadual" />
+                    <Bar dataKey="municipal" stackId="a" fill="#6B7280" name="Municipal" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

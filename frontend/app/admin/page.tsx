@@ -6,6 +6,9 @@ import {
   getColetas,
   iniciarColeta,
   getModalidades,
+  rebuildAnalitico,
+  baixarCsv,
+  CSV_TABELAS,
   type ColetaOut,
   type Modalidade,
 } from '@/lib/api';
@@ -21,18 +24,11 @@ import {
   Wifi,
   Play,
   FileDown,
-  Package,
+  RefreshCw,
   Clock,
 } from 'lucide-react';
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-
-const EXPORT_BUTTONS = [
-  { label: 'fato_licitacao', file: 'fato_licitacao.csv' },
-  { label: 'dim_orgao', file: 'dim_orgao.csv' },
-  { label: 'dim_tempo', file: 'dim_tempo.csv' },
-  { label: 'dim_modalidade', file: 'dim_modalidade.csv' },
-];
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return 'N/D';
@@ -77,8 +73,9 @@ export default function PainelAdminPage() {
   const [dataFim, setDataFim] = useState(defaultDate(0));
   const [erroColeta, setErroColeta] = useState<string | null>(null);
 
-  const [exportingIndex, setExportingIndex] = useState<number | null>(null);
-  const [exportingAll, setExportingAll] = useState(false);
+  const [exportingTabela, setExportingTabela] = useState<string | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMsg, setRebuildMsg] = useState<string | null>(null);
 
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -163,14 +160,31 @@ export default function PainelAdminPage() {
   // Limpa polling ao desmontar
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  const handleExportSingle = (index: number) => {
-    setExportingIndex(index);
-    setTimeout(() => setExportingIndex(null), 1500);
+  const handleExportSingle = async (tabela: string) => {
+    setExportingTabela(tabela);
+    try {
+      await baixarCsv(tabela);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+      setRebuildMsg(`Falha ao exportar ${tabela}: ${msg}`);
+    } finally {
+      setExportingTabela(null);
+    }
   };
 
-  const handleExportAll = () => {
-    setExportingAll(true);
-    setTimeout(() => setExportingAll(false), 2000);
+  const handleRebuild = async () => {
+    setRebuilding(true);
+    setRebuildMsg(null);
+    try {
+      const r = await rebuildAnalitico();
+      const total = r.contagens?.fato_licitacao ?? 0;
+      setRebuildMsg(`Base analítica reconstruída: ${total.toLocaleString('pt-BR')} licitações no fato.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+      setRebuildMsg(`Falha ao reconstruir: ${msg}`);
+    } finally {
+      setRebuilding(false);
+    }
   };
 
   const ultimaColeta = coletas[0];
@@ -425,28 +439,41 @@ export default function PainelAdminPage() {
         {/* Export for BI */}
         <section id="exportar" className="bg-white border border-[#E2E8F0] rounded-lg p-6">
           <h2 className="text-[17px] text-[#111827] font-medium mb-1">Exportar dados para BI</h2>
-          <p className="text-[13px] text-[#6B7280] mb-6">Gera arquivos CSV com o modelo dimensional para importação no Power BI</p>
-          <div className="flex flex-wrap gap-3 mb-5">
-            {EXPORT_BUTTONS.map((btn, i) => (
+          <p className="text-[13px] text-[#6B7280] mb-6">Gera arquivos CSV com o modelo dimensional (star schema) para importação no Power BI</p>
+
+          {/* Reconstruir base analítica */}
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-[#E2E8F0]">
+            <button
+              onClick={handleRebuild}
+              disabled={rebuilding}
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#1A3A5C] text-white rounded hover:bg-[#2E6DA4] transition-colors font-medium text-[15px] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {rebuilding ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {rebuilding ? 'Reconstruindo...' : 'Reconstruir base analítica'}
+            </button>
+            <p className="text-[13px] text-[#6B7280]">
+              Atualiza as dimensões e o fato com os dados coletados. Roda automaticamente após cada coleta.
+            </p>
+          </div>
+
+          <p className="text-[13px] text-[#111827] font-medium mb-3">Baixar tabelas (CSV)</p>
+          <div className="flex flex-wrap gap-3">
+            {CSV_TABELAS.map((tabela) => (
               <button
-                key={btn.file}
-                onClick={() => handleExportSingle(i)}
-                disabled={exportingIndex === i}
+                key={tabela}
+                onClick={() => handleExportSingle(tabela)}
+                disabled={exportingTabela === tabela}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#F5F7FA] border border-[#E2E8F0] text-[#111827] rounded hover:border-[#2E6DA4] hover:text-[#1A3A5C] transition-colors text-[13px] font-medium disabled:opacity-60"
               >
-                {exportingIndex === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-                {btn.label}
+                {exportingTabela === tabela ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                {tabela}
               </button>
             ))}
           </div>
-          <button
-            onClick={handleExportAll}
-            disabled={exportingAll}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#1A3A5C] text-white rounded hover:bg-[#2E6DA4] transition-colors font-medium text-[15px] disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {exportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
-            {exportingAll ? 'Gerando ZIP...' : 'Exportar todos (ZIP)'}
-          </button>
+
+          {rebuildMsg && (
+            <p className="mt-4 text-[13px] text-[#1A3A5C]">{rebuildMsg}</p>
+          )}
         </section>
       </div>
     </div>
