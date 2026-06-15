@@ -52,10 +52,7 @@ def db_session(engine):
 
 @pytest.fixture(scope="function")
 def client(db_session):
-    from api.routes import _cached_estados, _cached_modalidades, app, get_session
-
-    _cached_modalidades.cache_clear()
-    _cached_estados.cache_clear()
+    from api.routes import app, get_session
 
     def override_get_session():
         yield db_session
@@ -66,8 +63,6 @@ def client(db_session):
         yield c
 
     app.dependency_overrides.clear()
-    _cached_modalidades.cache_clear()
-    _cached_estados.cache_clear()
 
 
 def make_licitacao(session, **kwargs) -> Licitacao:

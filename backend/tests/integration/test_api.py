@@ -43,10 +43,6 @@ class TestEstados:
     def test_total_atualizado_com_licitacoes(self, client, db_session):
         make_licitacao(db_session, uf="BA")
 
-        from api import _cached_estados
-
-        _cached_estados.cache_clear()
-
         resp = client.get("/estados")
         ba = next(e for e in resp.json() if e["uf"] == "BA")
         assert ba["total"] == 1

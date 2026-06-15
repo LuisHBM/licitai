@@ -6,7 +6,8 @@ from db.models import Base, Estado, Modalidade
 
 
 def _database_url() -> str:
-    if url := settings.get("DATABASE_URL"):
+    import os
+    if url := os.environ.get("DATABASE_URL") or settings.get("DATABASE_URL"):
         return url
     host, port, name, user = settings.DB_HOST, settings.get("DB_PORT", 5432), settings.DB_NAME, settings.DB_USER
     if not all([host, name, user]):

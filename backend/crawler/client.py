@@ -5,7 +5,7 @@ from crawler.schemas import PaginaContratacoes, PaginaItens
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 50
+PAGE_SIZE = 50  # PNCP rejeita valores acima de 50 apesar do manual dizer 500
 
 
 def fetch_contratacoes_page(

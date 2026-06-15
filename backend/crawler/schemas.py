@@ -74,6 +74,9 @@ class Contratacao(BaseModel):
 
     numeroControlePNCP: str
     modalidadeId: int | None = None
+    modalidadeNome: str | None = None
+    modoDisputaId: int | None = None
+    modoDisputaNome: str | None = None
     orgaoEntidade: OrgaoEntidade
     unidadeOrgao: UnidadeOrgao
     numeroCompra: PNCPStr = None
@@ -83,6 +86,7 @@ class Contratacao(BaseModel):
     valorTotalEstimado: PNCPDecimal = None
     valorTotalHomologado: PNCPDecimal = None
     situacaoCompraId: int | None = None
+    situacaoCompraNome: str | None = None
     srp: bool | None = None
     dataPublicacaoPncp: PNCPDate = None
     dataAberturaProposta: PNCPDatetime = None
@@ -96,6 +100,9 @@ class PaginaContratacoes(BaseModel):
 
     totalPaginas: int = 0
     totalRegistros: int = 0
+    numeroPagina: int = 0
+    paginasRestantes: int = 0
+    empty: bool = False
     data: list[Contratacao] = []
 
 

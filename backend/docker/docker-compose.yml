@@ -28,6 +28,10 @@ services:
       - ../settings.local.toml:/app/settings.local.toml:ro
       - ../.secrets.local.toml:/app/.secrets.local.toml:ro
     environment:
+      DATABASE_URL: postgresql://postgres:licitai@postgres:5432/licitai
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   tests:
     build:

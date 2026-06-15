@@ -1,7 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import date
-from functools import lru_cache
 from uuid import UUID
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
@@ -126,21 +125,11 @@ def get_coleta(id_coleta: UUID, session: Session = Depends(get_session)):
 
 @app.get("/modalidades", response_model=list[ModalidadeOut])
 def list_modalidades(session: Session = Depends(get_session)):
-    return _cached_modalidades(session)
-
-
-@lru_cache(maxsize=1)
-def _cached_modalidades(session):
     return session.query(Modalidade).order_by(Modalidade.id_modalidade).all()
 
 
 @app.get("/estados", response_model=list[EstadoOut])
 def list_estados(session: Session = Depends(get_session)):
-    return _cached_estados(session)
-
-
-@lru_cache(maxsize=1)
-def _cached_estados(session):
     contagens = dict(
         session.query(Unidade.uf, func.count(Licitacao.id_licitacao))
         .join(Licitacao, Licitacao.id_unidade == Unidade.id_unidade)
@@ -148,9 +137,7 @@ def _cached_estados(session):
         .all()
     )
     estados = session.query(Estado).order_by(Estado.uf).all()
-    return [
-        EstadoOut(uf=e.uf, nome=e.nome, total=contagens.get(e.uf, 0)) for e in estados
-    ]
+    return [EstadoOut(uf=e.uf, nome=e.nome, total=contagens.get(e.uf, 0)) for e in estados]
 
 
 def _aplicar_filtros(query, *, q, uf, modalidade, data_inicio, data_fim, situacao_id):

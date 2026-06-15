@@ -84,6 +84,9 @@ def _upsert_licitacao(
         "valor_total_estimado": rec.valorTotalEstimado,
         "valor_total_homologado": rec.valorTotalHomologado,
         "situacao_id": rec.situacaoCompraId,
+        "situacao_nome": rec.situacaoCompraNome,
+        "modo_disputa_id": rec.modoDisputaId,
+        "modo_disputa_nome": rec.modoDisputaNome,
         "srp": rec.srp,
         "data_publicacao_pncp": rec.dataPublicacaoPncp,
         "data_abertura_proposta": rec.dataAberturaProposta,
@@ -157,14 +160,13 @@ def crawl(
                         logger.debug("Registro %s sem modalidade, pulando.", rec.numeroControlePNCP)
                         continue
                     try:
-                        id_orgao = _get_or_create_orgao(session, rec.orgaoEntidade, orgao_cache)
-                        id_unidade = _get_or_create_unidade(session, rec.unidadeOrgao, id_orgao, unidade_cache)
-                        _upsert_licitacao(session, rec, coleta.id_coleta, id_unidade)
+                        with session.begin_nested():
+                            id_orgao = _get_or_create_orgao(session, rec.orgaoEntidade, orgao_cache)
+                            id_unidade = _get_or_create_unidade(session, rec.unidadeOrgao, id_orgao, unidade_cache)
+                            _upsert_licitacao(session, rec, coleta.id_coleta, id_unidade)
                         total_saved += 1
                     except Exception as exc:
                         logger.error("Erro ao salvar licitação %s: %s", rec.numeroControlePNCP, exc)
-                        session.rollback()
-                        session.add(coleta)
 
                 session.commit()
 
