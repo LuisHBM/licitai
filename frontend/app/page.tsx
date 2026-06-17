@@ -160,7 +160,7 @@ export default function HomePage() {
               <span className="text-[16px] font-medium">Avançada</span>
             </button>
             <button
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               className="px-8 h-14 bg-[#1A3A5C] text-white rounded-lg hover:bg-[#2E6DA4] transition-colors font-medium text-[16px]"
             >
               Buscar
