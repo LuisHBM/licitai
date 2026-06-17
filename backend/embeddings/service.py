@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 EMBEDDING_DIM = 3072
 BATCH_SIZE = 100
-CHAT_MODEL = "gemini-2.0-flash"
+CHAT_MODEL = "gemini-2.5-flash"
 
 
 def _embeddings() -> GoogleGenerativeAIEmbeddings:
