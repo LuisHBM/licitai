@@ -134,6 +134,18 @@ class BuscaSemanticaRequest(BaseModel):
     limite: int = 20
 
 
+class ResumoIARequest(BaseModel):
+    q: str
+    uf: str | None = None
+    modalidade: int | None = None
+    limite: int = 10
+
+
+class ResumoIAResposta(BaseModel):
+    resumo: str
+    total_considerado: int
+
+
 
 class ColetaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

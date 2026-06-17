@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from db import Session as DBSession
 from db.models import Coleta, Estado, Licitacao, Modalidade, Orgao, Unidade
-from embeddings.service import gerar_embedding_query, indexar_licitacoes
+from embeddings.service import gerar_embedding_query, gerar_resumo, indexar_licitacoes
 from api.schemas import (
     BuscaSemanticaRequest,
     BuscaTextualRequest,
@@ -33,6 +33,8 @@ from api.schemas import (
     PainelValor,
     PaginatedLicitacoes,
     RebuildResult,
+    ResumoIARequest,
+    ResumoIAResposta,
 )
 
 logger = logging.getLogger(__name__)
@@ -417,6 +419,27 @@ def busca_semantica(body: BuscaSemanticaRequest, session: Session = Depends(get_
     vetor = gerar_embedding_query(body.q)
     rows = _buscar_por_vetor(session, vetor, uf=body.uf, modalidade=body.modalidade, limite=body.limite)
     return _rows_to_resumos(rows)
+
+
+@app.post("/busca/semantica/resumo", response_model=ResumoIAResposta)
+def busca_semantica_resumo(body: ResumoIARequest, session: Session = Depends(get_session)):
+    """RAG: recupera as licitações mais próximas (embeddings) e gera um resumo
+    em linguagem natural com um LLM generativo."""
+    vetor = gerar_embedding_query(body.q)
+    resumos = _rows_to_resumos(
+        _buscar_por_vetor(session, vetor, uf=body.uf, modalidade=body.modalidade, limite=body.limite)
+    )
+    licitacoes = [
+        {
+            "objeto_compra": r.objeto_compra,
+            "uf": r.uf,
+            "modalidade_nome": r.modalidade_nome,
+            "valor_total_estimado": str(r.valor_total_estimado) if r.valor_total_estimado is not None else None,
+        }
+        for r in resumos
+    ]
+    resumo = gerar_resumo(body.q, licitacoes)
+    return ResumoIAResposta(resumo=resumo, total_considerado=len(licitacoes))
 
 
 

@@ -8,6 +8,7 @@ import { FilterChip } from '@/components/filter-chip';
 import {
   buscarTextual,
   buscarSemantica,
+  gerarResumoIA,
   getModalidades,
   getFiltros,
   type FacetModalidade,
@@ -74,9 +75,29 @@ export function ResultadosContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [resumoIA, setResumoIA] = useState<string | null>(null);
+  const [resumoLoading, setResumoLoading] = useState(false);
+
   useEffect(() => {
     getModalidades().then(setModalidades).catch(() => {});
   }, []);
+
+  // Resumo por IA (RAG): só no modo semântico com uma busca ativa.
+  useEffect(() => {
+    if (!isSemanticActive || !query) {
+      setResumoIA(null);
+      setResumoLoading(false);
+      return;
+    }
+    let cancelado = false;
+    setResumoLoading(true);
+    setResumoIA(null);
+    gerarResumoIA({ q: query, uf: ufFilter || undefined, modalidade: modalidadeFilter, limite: 10 })
+      .then((resp) => { if (!cancelado) setResumoIA(resp.resumo); })
+      .catch(() => { if (!cancelado) setResumoIA(null); })
+      .finally(() => { if (!cancelado) setResumoLoading(false); });
+    return () => { cancelado = true; };
+  }, [query, isSemanticActive, ufFilter, modalidadeFilter]);
 
   useEffect(() => {
     getFiltros({
@@ -285,6 +306,25 @@ export function ResultadosContent() {
             <button onClick={clearAllFilters} className="flex items-center gap-1 text-[13px] text-[#6B7280] hover:text-[#111827] transition-colors ml-1">
               <X className="w-3.5 h-3.5" /> Limpar filtros
             </button>
+          </div>
+        )}
+
+        {/* Resumo por IA (RAG): retrieval por embeddings + geração por LLM */}
+        {isSemanticActive && query && (resumoLoading || resumoIA) && (
+          <div className="mb-6 rounded-lg border border-[#C7D7E8] bg-gradient-to-br from-[#F0F6FC] to-white p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-[#2E6DA4]" />
+              <span className="text-[13px] font-medium text-[#1A3A5C]">Resumo por IA</span>
+            </div>
+            {resumoLoading ? (
+              <div className="space-y-2 animate-pulse">
+                <div className="h-3 bg-[#E2E8F0] rounded w-full" />
+                <div className="h-3 bg-[#E2E8F0] rounded w-11/12" />
+                <div className="h-3 bg-[#E2E8F0] rounded w-3/4" />
+              </div>
+            ) : (
+              <p className="text-[14px] leading-relaxed text-[#374151]">{resumoIA}</p>
+            )}
           </div>
         )}
 

@@ -235,6 +235,25 @@ export async function buscarSemantica(params: {
   });
 }
 
+export interface ResumoIA {
+  resumo: string;
+  total_considerado: number;
+}
+
+export async function gerarResumoIA(params: {
+  q: string;
+  uf?: string;
+  modalidade?: number | null;
+  limite?: number;
+}): Promise<ResumoIA> {
+  return post('/busca/semantica/resumo', {
+    q: params.q,
+    uf: params.uf || undefined,
+    modalidade: params.modalidade || undefined,
+    limite: params.limite ?? 10,
+  });
+}
+
 export async function getLicitacao(numeroPncp: string): Promise<LicitacaoDetalhe> {
   return get(`/licitacoes/${encodeURIComponent(numeroPncp)}`);
 }
