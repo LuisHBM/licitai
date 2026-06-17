@@ -267,6 +267,12 @@ export async function iniciarColeta(body: ColetaSolicitacao): Promise<void> {
   await post('/coletas', body);
 }
 
+/** Autocomplete: termos do vocabulário das licitações que casam com `q`. */
+export async function getSugestoes(q: string, limite = 8): Promise<string[]> {
+  if (q.trim().length < 2) return [];
+  return get<string[]>('/sugestoes', { q, limite });
+}
+
 // ── camada analítica (star schema / OLAP) ────────────────────────────────────
 
 export interface PainelResumo {

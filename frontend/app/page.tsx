@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { SlidersHorizontal } from 'lucide-react';
-import { getEstados, getModalidades, type EstadoOut, type Modalidade } from '@/lib/api';
+import { getEstados, getModalidades, getSugestoes, type EstadoOut, type Modalidade } from '@/lib/api';
 
 const QUICK_FILTERS = [
   'Pregão Eletrônico',
@@ -25,18 +25,82 @@ export default function HomePage() {
   const [estados, setEstados] = useState<EstadoOut[]>([]);
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
 
+  // Autocomplete: vocabulário das licitações, com debounce.
+  const [sugestoes, setSugestoes] = useState<string[]>([]);
+  const [showSugestoes, setShowSugestoes] = useState(false);
+  const [sugAtiva, setSugAtiva] = useState(-1);
+  const ignorarBusca = useRef(false); // pula o fetch logo após escolher uma sugestão
+
   useEffect(() => {
     getEstados().then(setEstados).catch(() => {});
     getModalidades().then(setModalidades).catch(() => {});
   }, []);
 
-  const handleSearch = () => {
-    if (!searchQuery.trim()) return;
+  useEffect(() => {
+    if (ignorarBusca.current) {
+      ignorarBusca.current = false;
+      return;
+    }
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSugestoes([]);
+      setShowSugestoes(false);
+      return;
+    }
+    const id = setTimeout(() => {
+      getSugestoes(q)
+        .then((s) => {
+          setSugestoes(s);
+          setShowSugestoes(s.length > 0);
+          setSugAtiva(-1);
+        })
+        .catch(() => {});
+    }, 220);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  const handleSearch = (termo?: string) => {
+    const q = (termo ?? searchQuery).trim();
+    if (!q) return;
+    setShowSugestoes(false);
     const mode = isSemanticActive ? 'semantica' : 'textual';
-    const params = new URLSearchParams({ q: searchQuery.trim(), mode });
+    const params = new URLSearchParams({ q, mode });
     if (ufFilter) params.set('uf', ufFilter);
     if (modalidadeFilter) params.set('modalidade', modalidadeFilter);
     router.push(`/resultados?${params.toString()}`);
+  };
+
+  const escolherSugestao = (s: string) => {
+    ignorarBusca.current = true;
+    setSearchQuery(s);
+    setShowSugestoes(false);
+    setSugAtiva(-1);
+    handleSearch(s);
+  };
+
+  const onKeyDownBusca = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showSugestoes && sugestoes.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSugAtiva((i) => Math.min(i + 1, sugestoes.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSugAtiva((i) => Math.max(i - 1, -1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowSugestoes(false);
+        return;
+      }
+      if (e.key === 'Enter' && sugAtiva >= 0) {
+        e.preventDefault();
+        escolherSugestao(sugestoes[sugAtiva]);
+        return;
+      }
+    }
+    if (e.key === 'Enter') handleSearch();
   };
 
   return (
@@ -52,14 +116,37 @@ export default function HomePage() {
 
         <div className="mb-8">
           <div className="flex gap-3 mb-3">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Ex: computadores na Bahia acima de R$ 1 milhão"
-              className="flex-1 h-14 px-6 bg-[#F5F7FA] border border-[#E2E8F0] rounded-lg text-[16px] text-[#111827] placeholder:text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]"
-            />
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={onKeyDownBusca}
+                onFocus={() => sugestoes.length > 0 && setShowSugestoes(true)}
+                onBlur={() => setTimeout(() => setShowSugestoes(false), 120)}
+                placeholder="Ex: computadores na Bahia acima de R$ 1 milhão"
+                className="w-full h-14 px-6 bg-[#F5F7FA] border border-[#E2E8F0] rounded-lg text-[16px] text-[#111827] placeholder:text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#2E6DA4]"
+              />
+              {showSugestoes && sugestoes.length > 0 && (
+                <ul className="absolute z-10 left-0 right-0 mt-1 bg-white border border-[#E2E8F0] rounded-lg shadow-lg overflow-hidden">
+                  {sugestoes.map((s, i) => (
+                    <li
+                      key={s}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        escolherSugestao(s);
+                      }}
+                      onMouseEnter={() => setSugAtiva(i)}
+                      className={`px-6 py-2.5 text-[15px] cursor-pointer ${
+                        i === sugAtiva ? 'bg-[#F5F7FA] text-[#1A3A5C]' : 'text-[#111827]'
+                      }`}
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <button
               onClick={() => setShowAdvancedFilters((v) => !v)}
               className={`px-4 h-14 border rounded-lg transition-colors flex items-center gap-2 ${

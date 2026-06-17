@@ -86,6 +86,7 @@ def _executar_coleta(
 ) -> None:
     from analytics import rebuild_star_schema
     from crawler.etl import crawl
+    from sugestoes import rebuild_sugestoes
 
     try:
         with DBSession() as session:
@@ -96,9 +97,20 @@ def _executar_coleta(
                 uf=uf,
                 session=session,
             )
+            # Gera embeddings das licitações recém-coletadas para que a busca
+            # semântica enxergue os novos registros (o INNER JOIN com embedding
+            # ignora licitações ainda não indexadas).
+            try:
+                n = indexar_licitacoes(session)
+                logger.info("Embeddings gerados após coleta: %d licitações indexadas", n)
+            except Exception as exc:
+                logger.error("Indexação de embeddings após coleta falhou: %s", exc)
             # Atualiza o modelo dimensional com os dados recém-coletados.
             contagens = rebuild_star_schema(session)
             logger.info("Star schema reconstruído após coleta: %s", contagens)
+            # Atualiza o vocabulário de autocomplete com os novos objetos.
+            voc = rebuild_sugestoes(session)
+            logger.info("Vocabulário de sugestões reconstruído: %s", voc)
     except Exception as exc:
         logger.error("Coleta em background falhou: %s", exc)
 
@@ -448,6 +460,31 @@ def embeddings_indexar(background_tasks: BackgroundTasks, session: Session = Dep
     """Gera embeddings para licitações que ainda não foram indexadas."""
     background_tasks.add_task(indexar_licitacoes, session)
     return {"detail": "Indexação iniciada em background."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Autocomplete — vocabulário (palavras + frases) extraído dos objetos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@app.get("/sugestoes", response_model=list[str])
+def sugestoes(
+    q: str = Query(default="", description="prefixo digitado pelo usuário"),
+    limite: int = Query(default=8, ge=1, le=20),
+    session: Session = Depends(get_session),
+):
+    """Sugestões de autocomplete para a barra de busca. Servido do banco, sem IA."""
+    from sugestoes import buscar_sugestoes
+
+    return buscar_sugestoes(session, q, limite)
+
+
+@app.post("/sugestoes/rebuild")
+def sugestoes_rebuild(session: Session = Depends(get_session)):
+    """Reconstrói o vocabulário de autocomplete a partir dos objetos das licitações."""
+    from sugestoes import rebuild_sugestoes
+
+    return rebuild_sugestoes(session)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
