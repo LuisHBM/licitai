@@ -180,6 +180,8 @@ export async function getFiltros(params: {
   situacao_id?: number | null;
   data_inicio?: string;
   data_fim?: string;
+  valor_min?: string | number | null;
+  valor_max?: string | number | null;
 }): Promise<FiltrosOut> {
   return get('/licitacoes/filtros', {
     q: params.q || undefined,
@@ -188,6 +190,8 @@ export async function getFiltros(params: {
     situacao_id: params.situacao_id ?? undefined,
     data_inicio: params.data_inicio || undefined,
     data_fim: params.data_fim || undefined,
+    valor_min: params.valor_min || undefined,
+    valor_max: params.valor_max || undefined,
   });
 }
 
@@ -198,6 +202,8 @@ export async function buscarTextual(params: {
   situacao_id?: number | null;
   data_inicio?: string;
   data_fim?: string;
+  valor_min?: string | number | null;
+  valor_max?: string | number | null;
   pagina?: number;
   tamanho?: number;
 }): Promise<PaginatedLicitacoes> {
@@ -208,6 +214,8 @@ export async function buscarTextual(params: {
     situacao_id: params.situacao_id ?? undefined,
     data_inicio: params.data_inicio || undefined,
     data_fim: params.data_fim || undefined,
+    valor_min: params.valor_min || undefined,
+    valor_max: params.valor_max || undefined,
     pagina: params.pagina ?? 1,
     tamanho: params.tamanho ?? 8,
   });
@@ -245,6 +253,7 @@ export interface PainelResumo {
   total: number;
   valor_total_estimado: number;
   valor_medio: number;
+  economia_total: number;
   abertas: number;
 }
 
@@ -267,13 +276,37 @@ export interface PainelUF {
   outros: number;
 }
 
+export interface PainelCruzado {
+  series: string[];
+  dados: Array<Record<string, string | number>>;
+}
+
+/** Slicers aplicados a todos os gráficos do painel ao mesmo tempo. */
+export interface PainelFiltros {
+  dias?: number | null;
+  modalidade?: number | null;
+  uf?: string | null;
+  regiao?: string | null;
+  esfera?: string | null;
+}
+
 export interface PainelData {
   resumo: PainelResumo;
   modalidade: PainelPonto[];
+  economia: PainelPonto[];
   mes: PainelMes[];
   orgaos: PainelPonto[];
   uf: PainelUF[];
+  cruzado: PainelCruzado;
 }
+
+/** Regiões e esferas são conjuntos fixos — não precisam de endpoint próprio. */
+export const REGIOES = ['Norte', 'Nordeste', 'Centro-Oeste', 'Sudeste', 'Sul'] as const;
+export const ESFERAS: { value: string; label: string }[] = [
+  { value: 'F', label: 'Federal' },
+  { value: 'E', label: 'Estadual' },
+  { value: 'M', label: 'Municipal' },
+];
 
 export interface RebuildResult {
   mensagem: string;
@@ -314,15 +347,24 @@ export async function baixarCsv(tabela: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-/** Busca tudo que o painel analítico precisa, em paralelo. `dias` filtra o período. */
-export async function getPainel(dias?: number | null): Promise<PainelData> {
-  const p = dias ? { dias } : undefined;
-  const [resumo, modalidade, mes, orgaos, uf] = await Promise.all([
+/** Busca tudo que o painel analítico precisa, em paralelo, aplicando os slicers
+ * a todas as consultas de uma vez (slice & dice do star schema). */
+export async function getPainel(filtros: PainelFiltros = {}): Promise<PainelData> {
+  const p = {
+    dias: filtros.dias ?? undefined,
+    modalidade: filtros.modalidade ?? undefined,
+    uf: filtros.uf ?? undefined,
+    regiao: filtros.regiao ?? undefined,
+    esfera: filtros.esfera ?? undefined,
+  };
+  const [resumo, modalidade, economia, mes, orgaos, uf, cruzado] = await Promise.all([
     get<PainelResumo>('/analitico/resumo', p),
     get<PainelPonto[]>('/analitico/por-modalidade', p),
+    get<PainelPonto[]>('/analitico/economia-por-modalidade', p),
     get<PainelMes[]>('/analitico/por-mes', p),
     get<PainelPonto[]>('/analitico/top-orgaos', p),
     get<PainelUF[]>('/analitico/por-uf', p),
+    get<PainelCruzado>('/analitico/cruzado', p),
   ]);
-  return { resumo, modalidade, mes, orgaos, uf };
+  return { resumo, modalidade, economia, mes, orgaos, uf, cruzado };
 }

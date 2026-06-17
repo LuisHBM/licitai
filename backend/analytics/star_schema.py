@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import csv
 import io
+from dataclasses import dataclass
 from typing import Iterator
 
 from sqlalchemy import text
@@ -168,68 +169,119 @@ def _carregar_fato(session: Session) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Consultas agregadas (OLAP) — alimentam o painel analítico do front-end
 # ─────────────────────────────────────────────────────────────────────────────
-def _filtro_periodo(dias: int | None):
-    """Cláusula WHERE opcional (últimos N dias, relativo a hoje)."""
-    if dias:
-        return "WHERE t.data >= CURRENT_DATE - make_interval(days => :dias)", {"dias": dias}
-    return "", {}
+# Bloco FROM padrão: todo fato já vem ligado às quatro dimensões, então qualquer
+# slicer (período, modalidade, uf, região, esfera) é só mais uma condição WHERE.
+# É exatamente o "slice & dice" do modelo estrela — o JOIN foi pago no ETL.
+_FROM = """
+    FROM fato_licitacao f
+    LEFT JOIN dim_tempo      t ON t.id_tempo = f.id_tempo
+    LEFT JOIN dim_orgao      o ON o.id_dim_orgao = f.id_dim_orgao
+    LEFT JOIN dim_uf        du ON du.uf = f.uf
+    LEFT JOIN dim_modalidade m ON m.id_dim_modalidade = f.id_dim_modalidade
+"""
 
 
-def painel_resumo(session: Session, dias: int | None = None) -> dict:
-    where, params = _filtro_periodo(dias)
+@dataclass
+class Filtros:
+    """Slicers aplicáveis a qualquer consulta do painel. Todos opcionais."""
+    dias: int | None = None
+    modalidade: int | None = None
+    uf: str | None = None
+    regiao: str | None = None
+    esfera: str | None = None
+
+
+def _where(f: Filtros) -> tuple[str, dict]:
+    """Monta a cláusula WHERE a partir dos slicers preenchidos."""
+    cond: list[str] = []
+    params: dict = {}
+    if f.dias:
+        cond.append("t.data >= CURRENT_DATE - make_interval(days => :dias)")
+        params["dias"] = f.dias
+    if f.modalidade:
+        cond.append("f.id_dim_modalidade = :modalidade")
+        params["modalidade"] = f.modalidade
+    if f.uf:
+        cond.append("f.uf = :uf")
+        params["uf"] = f.uf.upper()
+    if f.regiao:
+        cond.append("du.regiao = :regiao")
+        params["regiao"] = f.regiao
+    if f.esfera:
+        cond.append("o.esfera = :esfera")
+        params["esfera"] = f.esfera
+    where = ("WHERE " + " AND ".join(cond)) if cond else ""
+    return where, params
+
+
+def painel_resumo(session: Session, filtros: Filtros | None = None) -> dict:
+    where, params = _where(filtros or Filtros())
     row = session.execute(text(f"""
         SELECT
             count(*)                                              AS total,
             coalesce(sum(f.valor_estimado), 0)                    AS valor_total,
             coalesce(avg(f.valor_estimado), 0)                    AS valor_medio,
+            coalesce(sum(f.economia), 0)                          AS economia_total,
             count(*) FILTER (WHERE f.situacao_id = 1)             AS abertas
-        FROM fato_licitacao f
-        LEFT JOIN dim_tempo t ON t.id_tempo = f.id_tempo
+        {_FROM}
         {where}
     """), params).one()
     return {
         "total": int(row.total),
         "valor_total_estimado": float(row.valor_total),
         "valor_medio": float(row.valor_medio),
+        "economia_total": float(row.economia_total),
         "abertas": int(row.abertas),
     }
 
 
-def painel_por_modalidade(session: Session, dias: int | None = None) -> list[dict]:
-    where, params = _filtro_periodo(dias)
+def painel_por_modalidade(session: Session, filtros: Filtros | None = None) -> list[dict]:
+    where, params = _where(filtros or Filtros())
     rows = session.execute(text(f"""
         SELECT m.nome AS name, count(*) AS value
-        FROM fato_licitacao f
-        JOIN dim_modalidade m ON m.id_dim_modalidade = f.id_dim_modalidade
-        LEFT JOIN dim_tempo t ON t.id_tempo = f.id_tempo
+        {_FROM}
         {where}
         GROUP BY m.nome
+        HAVING m.nome IS NOT NULL
         ORDER BY value DESC
     """), params).all()
     return [{"name": r.name, "value": int(r.value)} for r in rows]
 
 
-def painel_por_mes(session: Session, dias: int | None = None) -> list[dict]:
-    where, params = _filtro_periodo(dias)
+def painel_economia_por_modalidade(session: Session, filtros: Filtros | None = None) -> list[dict]:
+    """Economia (estimado − homologado) somada por modalidade. Só licitações
+    homologadas têm economia; as demais são ignoradas pelo sum()."""
+    where, params = _where(filtros or Filtros())
+    rows = session.execute(text(f"""
+        SELECT m.nome AS name, coalesce(sum(f.economia), 0) AS value
+        {_FROM}
+        {where}
+        GROUP BY m.nome
+        HAVING m.nome IS NOT NULL AND coalesce(sum(f.economia), 0) <> 0
+        ORDER BY value DESC
+    """), params).all()
+    return [{"name": r.name, "value": float(r.value)} for r in rows]
+
+
+def painel_por_mes(session: Session, filtros: Filtros | None = None) -> list[dict]:
+    where, params = _where(filtros or Filtros())
     rows = session.execute(text(f"""
         SELECT t.ano_mes, min(t.mes_abrev) AS mes, count(*) AS total
-        FROM fato_licitacao f
-        JOIN dim_tempo t ON t.id_tempo = f.id_tempo
+        {_FROM}
         {where}
         GROUP BY t.ano_mes
+        HAVING t.ano_mes IS NOT NULL
         ORDER BY t.ano_mes
     """), params).all()
     return [{"mes": r.mes, "ano_mes": r.ano_mes, "total": int(r.total)} for r in rows]
 
 
-def painel_top_orgaos(session: Session, dias: int | None = None, limite: int = 10) -> list[dict]:
-    where, params = _filtro_periodo(dias)
+def painel_top_orgaos(session: Session, filtros: Filtros | None = None, limite: int = 10) -> list[dict]:
+    where, params = _where(filtros or Filtros())
     params = {**params, "limite": limite}
     rows = session.execute(text(f"""
         SELECT o.razao_social AS name, count(*) AS value
-        FROM fato_licitacao f
-        JOIN dim_orgao o ON o.id_dim_orgao = f.id_dim_orgao
-        LEFT JOIN dim_tempo t ON t.id_tempo = f.id_tempo
+        {_FROM}
         {where}
         GROUP BY o.razao_social
         ORDER BY value DESC
@@ -238,9 +290,9 @@ def painel_top_orgaos(session: Session, dias: int | None = None, limite: int = 1
     return [{"name": r.name or "Não informado", "value": int(r.value)} for r in rows]
 
 
-def painel_por_uf(session: Session, dias: int | None = None) -> list[dict]:
+def painel_por_uf(session: Session, filtros: Filtros | None = None) -> list[dict]:
     """Contagem por UF dividida por esfera (federal/estadual/municipal)."""
-    where, params = _filtro_periodo(dias)
+    where, params = _where(filtros or Filtros())
     rows = session.execute(text(f"""
         SELECT
             f.uf AS name,
@@ -249,9 +301,7 @@ def painel_por_uf(session: Session, dias: int | None = None) -> list[dict]:
             count(*) FILTER (WHERE o.esfera = 'M') AS municipal,
             count(*) FILTER (WHERE o.esfera IS NULL OR o.esfera NOT IN ('F','E','M')) AS outros,
             count(*) AS total
-        FROM fato_licitacao f
-        JOIN dim_orgao o ON o.id_dim_orgao = f.id_dim_orgao
-        LEFT JOIN dim_tempo t ON t.id_tempo = f.id_tempo
+        {_FROM}
         {where}
         GROUP BY f.uf
         ORDER BY total DESC
@@ -266,6 +316,57 @@ def painel_por_uf(session: Session, dias: int | None = None) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# Quantas modalidades viram série própria no gráfico cruzado; o resto agrega
+# em "Outras" para o empilhamento não virar sopa de letrinhas.
+_TOP_MODALIDADES_CRUZADO = 4
+
+
+def painel_cruzado_regiao_modalidade(session: Session, filtros: Filtros | None = None) -> dict:
+    """Cruza duas dimensões: volume por região (eixo) × modalidade (séries).
+
+    Demonstra o poder do star schema — uma única agregação cortada por dois
+    eixos. Retorna as séries (top modalidades + "Outras") e uma linha por região
+    com a contagem de cada série, pronta para um bar chart empilhado.
+    """
+    where, params = _where(filtros or Filtros())
+
+    # 1) Top modalidades no recorte atual viram séries nomeadas.
+    top = session.execute(text(f"""
+        SELECT m.nome AS nome, count(*) AS total
+        {_FROM}
+        {where}
+        GROUP BY m.nome
+        HAVING m.nome IS NOT NULL
+        ORDER BY total DESC
+        LIMIT :top
+    """), {**params, "top": _TOP_MODALIDADES_CRUZADO}).all()
+    series = [r.nome for r in top]
+    if not series:
+        return {"series": [], "dados": []}
+
+    # 2) Conta por região, dobrando o que não está no top em "Outras".
+    rows = session.execute(text(f"""
+        SELECT
+            coalesce(du.regiao, 'Não classificada') AS regiao,
+            CASE WHEN m.nome = ANY(:series) THEN m.nome ELSE 'Outras' END AS modalidade,
+            count(*) AS total
+        {_FROM}
+        {where}
+        GROUP BY 1, 2
+    """), {**params, "series": series}).all()
+
+    tem_outras = any(r.modalidade == "Outras" for r in rows)
+    colunas = series + (["Outras"] if tem_outras else [])
+
+    por_regiao: dict[str, dict] = {}
+    for r in rows:
+        linha = por_regiao.setdefault(r.regiao, {"regiao": r.regiao, **{c: 0 for c in colunas}})
+        linha[r.modalidade] = int(r.total)
+
+    dados = sorted(por_regiao.values(), key=lambda d: sum(d[c] for c in colunas), reverse=True)
+    return {"series": colunas, "dados": dados}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

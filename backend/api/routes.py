@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
@@ -24,10 +25,12 @@ from api.schemas import (
     LicitacaoDetalhe,
     LicitacaoResumo,
     ModalidadeOut,
+    PainelCruzado,
     PainelMes,
     PainelPonto,
     PainelResumo,
     PainelUF,
+    PainelValor,
     PaginatedLicitacoes,
     RebuildResult,
 )
@@ -149,7 +152,7 @@ def list_estados(session: Session = Depends(get_session)):
     return [EstadoOut(uf=e.uf, nome=e.nome, total=contagens.get(e.uf, 0)) for e in estados]
 
 
-def _aplicar_filtros(query, *, q, uf, modalidade, data_inicio, data_fim, situacao_id):
+def _aplicar_filtros(query, *, q, uf, modalidade, data_inicio, data_fim, situacao_id, valor_min=None, valor_max=None):
     if q:
         query = query.filter(
             Licitacao.search_vector.op("@@")(func.plainto_tsquery("portuguese", q))
@@ -164,6 +167,10 @@ def _aplicar_filtros(query, *, q, uf, modalidade, data_inicio, data_fim, situaca
         query = query.filter(Licitacao.data_publicacao_pncp <= data_fim)
     if situacao_id is not None:
         query = query.filter(Licitacao.situacao_id == situacao_id)
+    if valor_min is not None:
+        query = query.filter(Licitacao.valor_total_estimado >= valor_min)
+    if valor_max is not None:
+        query = query.filter(Licitacao.valor_total_estimado <= valor_max)
     return query
 
 
@@ -175,9 +182,11 @@ def filtros_licitacoes(
     data_inicio: date | None = Query(default=None),
     data_fim: date | None = Query(default=None),
     situacao_id: int | None = Query(default=None),
+    valor_min: Decimal | None = Query(default=None),
+    valor_max: Decimal | None = Query(default=None),
     session: Session = Depends(get_session),
 ):
-    kw = dict(q=q, uf=uf, modalidade=modalidade, data_inicio=data_inicio, data_fim=data_fim, situacao_id=situacao_id)
+    kw = dict(q=q, uf=uf, modalidade=modalidade, data_inicio=data_inicio, data_fim=data_fim, situacao_id=situacao_id, valor_min=valor_min, valor_max=valor_max)
 
     def _base(cols):
         return (
@@ -235,6 +244,8 @@ def search_licitacoes(
     data_inicio: date | None = Query(default=None),
     data_fim: date | None = Query(default=None),
     situacao_id: int | None = Query(default=None),
+    valor_min: Decimal | None = Query(default=None),
+    valor_max: Decimal | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
     tamanho: int = Query(default=20, ge=1, le=100),
     session: Session = Depends(get_session),
@@ -252,6 +263,7 @@ def search_licitacoes(
         .join(Orgao, Unidade.id_orgao == Orgao.id_orgao)
         .join(Modalidade, Licitacao.id_modalidade == Modalidade.id_modalidade),
         q=q, uf=uf, modalidade=modalidade, data_inicio=data_inicio, data_fim=data_fim, situacao_id=situacao_id,
+        valor_min=valor_min, valor_max=valor_max,
     )
 
     total = query.count()
@@ -369,6 +381,8 @@ def busca_textual(body: BuscaTextualRequest, session: Session = Depends(get_sess
         data_inicio=body.data_inicio,
         data_fim=body.data_fim,
         situacao_id=body.situacao_id,
+        valor_min=body.valor_min,
+        valor_max=body.valor_max,
     )
     total = query.count()
     rows = (
@@ -428,55 +442,88 @@ def analitico_rebuild(session: Session = Depends(get_session)):
     return RebuildResult(mensagem="Star schema reconstruído.", contagens=contagens)
 
 
+def get_filtros(
+    dias: int | None = Query(default=None, ge=1),
+    modalidade: int | None = Query(default=None, description="id da modalidade"),
+    uf: str | None = Query(default=None, description="sigla do estado"),
+    regiao: str | None = Query(default=None, description="região (ex: Nordeste)"),
+    esfera: str | None = Query(default=None, description="esfera do órgão: F/E/M"),
+):
+    """Slicers do painel: aplicados de forma uniforme a todas as consultas OLAP."""
+    from analytics import Filtros
+
+    return Filtros(dias=dias, modalidade=modalidade, uf=uf, regiao=regiao, esfera=esfera)
+
+
 @app.get("/analitico/resumo", response_model=PainelResumo)
 def analitico_resumo(
-    dias: int | None = Query(default=None, ge=1),
+    filtros=Depends(get_filtros),
     session: Session = Depends(get_session),
 ):
     from analytics import painel_resumo
 
-    return PainelResumo(**painel_resumo(session, dias))
+    return PainelResumo(**painel_resumo(session, filtros))
 
 
 @app.get("/analitico/por-modalidade", response_model=list[PainelPonto])
 def analitico_por_modalidade(
-    dias: int | None = Query(default=None, ge=1),
+    filtros=Depends(get_filtros),
     session: Session = Depends(get_session),
 ):
     from analytics import painel_por_modalidade
 
-    return [PainelPonto(**p) for p in painel_por_modalidade(session, dias)]
+    return [PainelPonto(**p) for p in painel_por_modalidade(session, filtros)]
+
+
+@app.get("/analitico/economia-por-modalidade", response_model=list[PainelValor])
+def analitico_economia_por_modalidade(
+    filtros=Depends(get_filtros),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_economia_por_modalidade
+
+    return [PainelValor(**p) for p in painel_economia_por_modalidade(session, filtros)]
 
 
 @app.get("/analitico/por-mes", response_model=list[PainelMes])
 def analitico_por_mes(
-    dias: int | None = Query(default=None, ge=1),
+    filtros=Depends(get_filtros),
     session: Session = Depends(get_session),
 ):
     from analytics import painel_por_mes
 
-    return [PainelMes(**p) for p in painel_por_mes(session, dias)]
+    return [PainelMes(**p) for p in painel_por_mes(session, filtros)]
 
 
 @app.get("/analitico/top-orgaos", response_model=list[PainelPonto])
 def analitico_top_orgaos(
-    dias: int | None = Query(default=None, ge=1),
+    filtros=Depends(get_filtros),
     limite: int = Query(default=10, ge=1, le=50),
     session: Session = Depends(get_session),
 ):
     from analytics import painel_top_orgaos
 
-    return [PainelPonto(**p) for p in painel_top_orgaos(session, dias, limite)]
+    return [PainelPonto(**p) for p in painel_top_orgaos(session, filtros, limite)]
 
 
 @app.get("/analitico/por-uf", response_model=list[PainelUF])
 def analitico_por_uf(
-    dias: int | None = Query(default=None, ge=1),
+    filtros=Depends(get_filtros),
     session: Session = Depends(get_session),
 ):
     from analytics import painel_por_uf
 
-    return [PainelUF(**p) for p in painel_por_uf(session, dias)]
+    return [PainelUF(**p) for p in painel_por_uf(session, filtros)]
+
+
+@app.get("/analitico/cruzado", response_model=PainelCruzado)
+def analitico_cruzado(
+    filtros=Depends(get_filtros),
+    session: Session = Depends(get_session),
+):
+    from analytics import painel_cruzado_regiao_modalidade
+
+    return PainelCruzado(**painel_cruzado_regiao_modalidade(session, filtros))
 
 
 @app.get("/analitico/csv/{tabela}")

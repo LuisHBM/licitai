@@ -86,6 +86,8 @@ export function ResultadosContent() {
       situacao_id: situacaoFilter,
       data_inicio: dataInicio || undefined,
       data_fim: dataFim || undefined,
+      valor_min: valorMin || undefined,
+      valor_max: valorMax || undefined,
     })
       .then((resp) => {
         setFiltroModalidades(resp.modalidades);
@@ -97,7 +99,7 @@ export function ResultadosContent() {
         setUfs([]);
         setSituacoes([]);
       });
-  }, [query, ufFilter, modalidadeFilter, situacaoFilter, dataInicio, dataFim]);
+  }, [query, ufFilter, modalidadeFilter, situacaoFilter, dataInicio, dataFim, valorMin, valorMax]);
 
   const hasActiveFilters = !!ufFilter || modalidadeFilter !== null || situacaoFilter !== null || !!valorMin || !!valorMax || !!dataInicio || !!dataFim;
 
@@ -140,15 +142,14 @@ export function ResultadosContent() {
           situacao_id: situacaoFilter,
           data_inicio: dataInicio || undefined,
           data_fim: dataFim || undefined,
+          valor_min: valorMin || undefined,
+          valor_max: valorMax || undefined,
           pagina: currentPage,
           tamanho: PER_PAGE,
         });
-        let filtered = data.resultados;
-        if (valorMin) filtered = filtered.filter((r) => parseFloat(r.valor_total_estimado ?? '0') >= Number(valorMin));
-        if (valorMax) filtered = filtered.filter((r) => parseFloat(r.valor_total_estimado ?? '0') <= Number(valorMax));
         setTotal(data.total);
         setTotalPages(Math.max(1, Math.ceil(data.total / PER_PAGE)));
-        setResultados(filtered);
+        setResultados(data.resultados);
       }
     } catch (e) {
       setError('Não foi possível carregar os resultados. Tente novamente em instantes.');

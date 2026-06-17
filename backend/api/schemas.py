@@ -121,6 +121,8 @@ class BuscaTextualRequest(BaseModel):
     data_inicio: date | None = None
     data_fim: date | None = None
     situacao_id: int | None = None
+    valor_min: Decimal | None = None
+    valor_max: Decimal | None = None
     pagina: int = 1
     tamanho: int = 20
 
@@ -158,12 +160,19 @@ class PainelResumo(BaseModel):
     total: int
     valor_total_estimado: float
     valor_medio: float
+    economia_total: float
     abertas: int
 
 
 class PainelPonto(BaseModel):
     name: str
     value: int
+
+
+class PainelValor(BaseModel):
+    """Ponto cujo valor é monetário (ex: economia em reais)."""
+    name: str
+    value: float
 
 
 class PainelMes(BaseModel):
@@ -178,3 +187,10 @@ class PainelUF(BaseModel):
     estadual: int
     municipal: int
     outros: int
+
+
+class PainelCruzado(BaseModel):
+    """Cruzamento de duas dimensões para bar chart empilhado: `series` lista os
+    nomes das séries e cada item de `dados` tem a categoria + uma contagem por série."""
+    series: list[str]
+    dados: list[dict[str, object]]
