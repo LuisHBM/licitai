@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Header } from '@/components/header';
-import { getPainel, formatValor, type PainelData } from '@/lib/api';
+import { getPainel, formatValor, formatValorCompact, type PainelData } from '@/lib/api';
 
 const PERIODOS: Record<string, number | null> = {
   '30': 30,
@@ -43,10 +43,18 @@ export default function PainelPage() {
 
   const cards = data
     ? [
-        { label: 'Total de licitações indexadas', value: data.resumo.total.toLocaleString('pt-BR') },
-        { label: 'Valor total estimado', value: formatValor(data.resumo.valor_total_estimado) },
-        { label: 'Média por licitação', value: formatValor(data.resumo.valor_medio) },
-        { label: 'Licitações divulgadas (abertas)', value: data.resumo.abertas.toLocaleString('pt-BR') },
+        { label: 'Total de licitações indexadas', value: data.resumo.total.toLocaleString('pt-BR'), full: null },
+        {
+          label: 'Valor total estimado',
+          value: formatValorCompact(data.resumo.valor_total_estimado),
+          full: formatValor(data.resumo.valor_total_estimado),
+        },
+        {
+          label: 'Média por licitação',
+          value: formatValorCompact(data.resumo.valor_medio),
+          full: formatValor(data.resumo.valor_medio),
+        },
+        { label: 'Licitações divulgadas (abertas)', value: data.resumo.abertas.toLocaleString('pt-BR'), full: null },
       ]
     : [];
 
@@ -84,7 +92,12 @@ export default function PainelPage() {
               {cards.map((card) => (
                 <div key={card.label} className="bg-[#F5F7FA] rounded-lg p-6">
                   <div className="text-[13px] text-[#6B7280] mb-2">{card.label}</div>
-                  <div className="text-[24px] text-[#1A3A5C] font-medium">{card.value}</div>
+                  <div
+                    className="text-[24px] text-[#1A3A5C] font-medium"
+                    title={card.full ?? undefined}
+                  >
+                    {card.value}
+                  </div>
                 </div>
               ))}
             </div>

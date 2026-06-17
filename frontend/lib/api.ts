@@ -128,6 +128,19 @@ export function formatValor(valor: string | number | null): string {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/** Versão reduzida: R$ 10,31 tri / R$ 124,66 mi / R$ 36,6 mil. */
+export function formatValorCompact(valor: string | number | null): string {
+  if (valor === null || valor === undefined) return 'Não informado';
+  const n = typeof valor === 'string' ? parseFloat(valor) : valor;
+  if (isNaN(n)) return 'Não informado';
+  return n.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 2,
+  });
+}
+
 // ── funções de API ─────────────────────────────────────────────────────────
 
 async function get<T>(path: string, params?: Record<string, string | number | null | undefined>): Promise<T> {
