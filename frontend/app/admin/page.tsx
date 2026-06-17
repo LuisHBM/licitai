@@ -46,25 +46,12 @@ function defaultDate(daysAgo: number): string {
   return d.toISOString().substring(0, 10);
 }
 
-const COLLECTING_LOG_LINES = [
-  'INFO  Iniciando nova coleta...',
-  'INFO  Conectando à API PNCP...',
-  'INFO  Conexão estabelecida',
-  'INFO  Buscando registros...',
-  'INFO  Processando dados recebidos...',
-  'INFO  Inserindo no banco de dados...',
-  'INFO  Gerando embeddings...',
-  'INFO  Finalizando...',
-];
-
 export default function PainelAdminPage() {
   const [coletas, setColetas] = useState<ColetaOut[]>([]);
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
   const [loadingColetas, setLoadingColetas] = useState(true);
 
   const [isCollecting, setIsCollecting] = useState(false);
-  const [collectProgress, setCollectProgress] = useState(0);
-  const [logs, setLogs] = useState('Aguardando ação...');
   const [agendarDiario, setAgendarDiario] = useState(false);
 
   const [selectedModalidade, setSelectedModalidade] = useState<string>('todas');
@@ -79,45 +66,54 @@ export default function PainelAdminPage() {
 
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sawRunningRef = useRef(false);
+  const pollCountRef = useRef(0);
+
+  // Log real da coleta mais recente (vem do backend, persistido em coleta.log).
+  const logs = coletas[0]?.log ?? null;
 
   useEffect(() => {
     if (logsRef.current) logsRef.current.scrollTop = logsRef.current.scrollHeight;
   }, [logs]);
 
+  const stopPolling = useCallback(() => {
+    setIsCollecting(false);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
   const fetchColetas = useCallback(async () => {
     try {
       const data = await getColetas();
       setColetas(data);
-      if (data.some((c) => c.status === 'executando')) {
-        // still running, keep polling
-      } else {
-        setIsCollecting(false);
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+
+      // Só decide parar quando está no modo de polling de uma coleta em curso.
+      if (pollRef.current) {
+        pollCountRef.current += 1;
+        const rodando = data.some((c) => c.status === 'em_andamento');
+        if (rodando) {
+          sawRunningRef.current = true;
+        } else if (sawRunningRef.current || pollCountRef.current >= 6) {
+          // já vimos rodar e agora acabou, ou esperamos tempo suficiente (~30s)
+          stopPolling();
+        }
       }
     } catch {
       // backend offline — mantém o estado atual
     } finally {
       setLoadingColetas(false);
     }
-  }, []);
+  }, [stopPolling]);
 
   useEffect(() => {
     fetchColetas();
     getModalidades().then(setModalidades).catch(() => {});
   }, [fetchColetas]);
 
-  const appendLog = (line: string) => {
-    const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    setLogs((prev) => `${prev}\n[${ts}] ${line}`);
-  };
-
   const handleStartColeta = async () => {
     if (isCollecting || !dataInicio || !dataFim) return;
 
     setErroColeta(null);
     setIsCollecting(true);
-    setCollectProgress(0);
-    setLogs('');
 
     const modalidadeIds =
       selectedModalidade === 'todas'
@@ -131,34 +127,33 @@ export default function PainelAdminPage() {
         modalidades: modalidadeIds,
         uf: uf || null,
       });
-      appendLog('INFO  Coleta iniciada em background pelo servidor');
 
-      // Simula progresso visual enquanto backend processa
-      let step = 0;
-      const tick = () => {
-        if (step >= COLLECTING_LOG_LINES.length) return;
-        appendLog(COLLECTING_LOG_LINES[step]);
-        setCollectProgress(Math.round(((step + 1) / COLLECTING_LOG_LINES.length) * 90));
-        step++;
-        setTimeout(tick, 800 + Math.random() * 600);
-      };
-      setTimeout(tick, 400);
-
-      // Polling real para detectar quando concluiu
-      pollRef.current = setInterval(async () => {
-        await fetchColetas();
-      }, 5000);
+      // Polling real: acompanha o status e o log persistidos pelo backend.
+      sawRunningRef.current = false;
+      pollCountRef.current = 0;
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => { fetchColetas(); }, 5000);
 
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erro desconhecido';
       setErroColeta(`Falha ao iniciar coleta: ${msg}`);
       setIsCollecting(false);
-      appendLog(`ERROR ${msg}`);
     }
   };
 
   // Limpa polling ao desmontar
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const handleExportLogs = () => {
+    if (!logs) return;
+    const blob = new Blob([logs], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coleta-${ultimaColeta?.id_coleta ?? 'log'}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleExportSingle = async (tabela: string) => {
     setExportingTabela(tabela);
@@ -334,12 +329,15 @@ export default function PainelAdminPage() {
 
           {isCollecting && (
             <div className="mt-4 pt-4 border-t border-[#E2E8F0]">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[13px] text-[#6B7280]">Progresso da coleta</span>
-                <span className="text-[13px] font-medium text-[#1A3A5C]">{collectProgress}%</span>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2E6DA4]" />
+                <span className="text-[13px] text-[#6B7280]">
+                  Coleta em andamento no servidor
+                  {ultimaColeta?.total_registros ? ` — ${ultimaColeta.total_registros.toLocaleString('pt-BR')} registros até agora` : ''}
+                </span>
               </div>
               <div className="w-full bg-[#F5F7FA] rounded-full h-2 overflow-hidden">
-                <div className="bg-[#2E6DA4] h-full rounded-full transition-all duration-300" style={{ width: `${collectProgress}%` }} />
+                <div className="bg-[#2E6DA4] h-full w-1/3 rounded-full animate-pulse" />
               </div>
             </div>
           )}
@@ -390,7 +388,7 @@ export default function PainelAdminPage() {
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[12px] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" />Concluída
                           </span>
-                        ) : c.status === 'executando' ? (
+                        ) : c.status === 'em_andamento' ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[12px] font-medium">
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />Em andamento
                           </span>
@@ -425,13 +423,17 @@ export default function PainelAdminPage() {
         <section id="logs" className="bg-white border border-[#E2E8F0] rounded-lg mb-6 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0]">
             <h2 className="text-[17px] text-[#111827] font-medium">Logs da última coleta</h2>
-            <button className="flex items-center gap-2 px-4 py-2 border border-[#E2E8F0] text-[#111827] rounded hover:bg-[#F5F7FA] transition-colors text-[13px]">
+            <button
+              onClick={handleExportLogs}
+              disabled={!logs}
+              className="flex items-center gap-2 px-4 py-2 border border-[#E2E8F0] text-[#111827] rounded hover:bg-[#F5F7FA] transition-colors text-[13px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Download className="w-4 h-4" />Exportar logs
             </button>
           </div>
           <div className="p-4 bg-[#1E1E1E]">
             <pre ref={logsRef} className="text-[#D4D4D4] font-mono text-[13px] leading-relaxed whitespace-pre-wrap max-h-72 overflow-y-auto">
-              {logs}
+              {logs ?? 'Nenhuma coleta registrada ainda. Inicie uma coleta para ver o log real da execução.'}
             </pre>
           </div>
         </section>

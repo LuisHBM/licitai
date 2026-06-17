@@ -59,6 +59,7 @@ export interface ColetaOut {
   data_inicio_coleta: string;
   data_fim_coleta: string;
   total_registros: number;
+  log: string | null;
   executado_em: string | null;
 }
 

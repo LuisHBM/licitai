@@ -2,7 +2,7 @@ import logging
 import random
 import time
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -14,6 +14,16 @@ from db.models import Coleta, Licitacao, Orgao, Unidade
 logger = logging.getLogger(__name__)
 
 PAGE_DELAY = 2.0
+
+
+def _log(coleta: Coleta, line: str, level: int = logging.INFO) -> None:
+    """Registra uma linha tanto no logger quanto no campo `coleta.log`, para que
+    o painel de admin mostre o log real da execução (não simulado)."""
+    logger.log(level, line)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    nivel = logging.getLevelName(level)
+    entrada = f"[{ts}] {nivel:<5} {line}"
+    coleta.log = f"{coleta.log}\n{entrada}" if coleta.log else entrada
 
 
 def _get_or_create_orgao(session: Session, orgao: OrgaoEntidade, cache: dict) -> uuid.UUID:
@@ -119,8 +129,6 @@ def crawl(
     unidade_cache: dict = {}
 
     for modalidade in modalidades:
-        logger.info("Coletando modalidade %d (%s → %s)...", modalidade, data_inicio, data_fim)
-
         coleta = Coleta(
             status="em_andamento",
             modalidade_filtro=modalidade,
@@ -132,47 +140,59 @@ def crawl(
         session.add(coleta)
         session.flush()
 
+        _log(coleta, f"Iniciando coleta — modalidade {modalidade}, "
+                     f"período {data_inicio} a {data_fim}, UF {uf or 'todas'}")
+        session.commit()
+
         total_saved = 0
 
-        for dia in _dias(data_inicio, data_fim):
-            dia_str = dia.strftime("%Y%m%d")
+        try:
+            for dia in _dias(data_inicio, data_fim):
+                dia_str = dia.strftime("%Y%m%d")
 
-            try:
-                first_page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=1, uf=uf)
-            except Exception as exc:
-                logger.error("  Dia %s falhou: %s. Pulando para o próximo...", dia_str, exc)
-                time.sleep(random.uniform(1.0, 3.0))
-                continue
-
-            logger.info("  Dia %s — %d registros em %d páginas", dia_str, first_page.totalRegistros, first_page.totalPaginas)
-
-            for page_num in range(1, first_page.totalPaginas + 1):
                 try:
-                    if page_num == 1:
-                        page = first_page
-                    else:
-                        time.sleep(PAGE_DELAY)
-                        page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=page_num, uf=uf)
+                    first_page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=1, uf=uf)
                 except Exception as exc:
-                    logger.error("  Dia %s página %d/%d falhou: %s. Continuando...", dia_str, page_num, first_page.totalPaginas, exc)
+                    _log(coleta, f"Dia {dia_str} falhou: {exc}. Pulando para o próximo.", logging.ERROR)
+                    session.commit()
+                    time.sleep(random.uniform(1.0, 3.0))
                     continue
 
-                for rec in page.data:
-                    if rec.modalidadeId is None:
-                        logger.debug("Registro %s sem modalidade, pulando.", rec.numeroControlePNCP)
-                        continue
+                _log(coleta, f"Dia {dia_str} — {first_page.totalRegistros} registros em {first_page.totalPaginas} páginas")
+
+                for page_num in range(1, first_page.totalPaginas + 1):
                     try:
-                        with session.begin_nested():
-                            id_orgao = _get_or_create_orgao(session, rec.orgaoEntidade, orgao_cache)
-                            id_unidade = _get_or_create_unidade(session, rec.unidadeOrgao, id_orgao, unidade_cache)
-                            _upsert_licitacao(session, rec, coleta.id_coleta, id_unidade)
-                        total_saved += 1
+                        if page_num == 1:
+                            page = first_page
+                        else:
+                            time.sleep(PAGE_DELAY)
+                            page = pncp_client.fetch_contratacoes_page(dia_str, dia_str, modalidade, pagina=page_num, uf=uf)
                     except Exception as exc:
-                        logger.error("Erro ao salvar licitação %s: %s", rec.numeroControlePNCP, exc)
+                        _log(coleta, f"Dia {dia_str} página {page_num}/{first_page.totalPaginas} falhou: {exc}. Continuando.", logging.ERROR)
+                        continue
 
-                session.commit()
+                    for rec in page.data:
+                        if rec.modalidadeId is None:
+                            logger.debug("Registro %s sem modalidade, pulando.", rec.numeroControlePNCP)
+                            continue
+                        try:
+                            with session.begin_nested():
+                                id_orgao = _get_or_create_orgao(session, rec.orgaoEntidade, orgao_cache)
+                                id_unidade = _get_or_create_unidade(session, rec.unidadeOrgao, id_orgao, unidade_cache)
+                                _upsert_licitacao(session, rec, coleta.id_coleta, id_unidade)
+                            total_saved += 1
+                        except Exception as exc:
+                            _log(coleta, f"Erro ao salvar licitação {rec.numeroControlePNCP}: {exc}", logging.ERROR)
 
-        coleta.status = "concluido"
-        coleta.total_registros = total_saved
-        session.commit()
-        logger.info("  Modalidade %d concluída: %d registros salvos.", modalidade, total_saved)
+                    coleta.total_registros = total_saved
+                    session.commit()
+
+            coleta.status = "concluido"
+            coleta.total_registros = total_saved
+            _log(coleta, f"Modalidade {modalidade} concluída: {total_saved} registros salvos.")
+            session.commit()
+        except Exception as exc:
+            coleta.status = "erro"
+            _log(coleta, f"Coleta interrompida por erro: {exc}", logging.ERROR)
+            session.commit()
+            raise

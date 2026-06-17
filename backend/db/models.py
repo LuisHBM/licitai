@@ -68,6 +68,7 @@ class Coleta(Base):
     data_inicio_coleta = Column(Date, nullable=False)
     data_fim_coleta = Column(Date, nullable=False)
     total_registros = Column(Integer, default=0)
+    log = Column(Text, nullable=True)
     executado_em = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     administrador = relationship("Administrador", back_populates="coletas")

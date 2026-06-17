@@ -157,6 +157,7 @@ class ColetaOut(BaseModel):
     data_inicio_coleta: date
     data_fim_coleta: date
     total_registros: int
+    log: str | None = None
     executado_em: datetime | None
 
 
